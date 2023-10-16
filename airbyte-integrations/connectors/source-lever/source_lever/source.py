@@ -42,7 +42,6 @@ class SourceLever(AbstractSource):
             Offers(authenticator=authenticator),
             Feedback(authenticator=authenticator),
             Interviews(authenticator=authenticator),
-            Applications(authenticator=authenticator),
             Requisitions(authenticator=authenticator),
             Users(authenticator=authenticator),
             Stages(authenticator=authenticator),
@@ -87,13 +86,7 @@ class LeverStream(HttpStream, ABC):
 
 class Opportunities(LeverStream):
     primary_key = "id"
-    stream_params = {"confidentiality": "all", "expand": "contact"}
-    # 1797 opportunities
-    # 1 record read
-    # stream_params = {"confidentiality": "all", "expand": "contact", "stage_id": "e54475bb-d3ad-43ff-b8b9-76c4fc38e78c" }
-
-    # 8311 opportunities
-    # stream_params = {"confidentiality": "all", "expand": "contact", "stage_id": "3a255cc8-0732-4bee-92bd-62acfec3572c" }
+    stream_params = {"confidentiality": "all", "expand": "contact", "expand": "applications"}
     
 
     @property
@@ -245,12 +238,6 @@ class Feedback(OpportunitySubStream):
 class Interviews(OpportunitySubStream):
     """
     Interviews stream: https://hire.lever.co/developer/documentation#list-all-interviews
-    """
-    primary_key = "id"
-
-class Applications(OpportunitySubStream):
-    """
-    Applications stream: https://hire.lever.co/developer/documentation#list-all-applications
     """
     primary_key = "id"
 
