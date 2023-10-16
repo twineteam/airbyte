@@ -38,6 +38,43 @@
     },
     "opportunity": {
       "type": "string"
+    },
+    "signedDocument": {
+      "type": ["object", "null"],
+      "properties": {
+        "fileName": {
+          "type": "string"
+        },
+        "uploadedAt": {
+          "type": "number"
+        },
+        "downloadUrl": {
+          "type": "string"
+        }
+      }
+    },
+    "sentDocument": {
+      "type": ["object", "null"],
+      "properties": {
+        "fileName": {
+          "type": "string"
+        },
+        "uploadedAt": {
+          "type": "number"
+        },
+        "downloadUrl": {
+          "type": "string"
+        }
+      }
+    },
+    "sentAt": {
+      "type": ["number", "null"]
+    },
+    "approved": {
+      "type": ["boolean", "null"]
+    },
+    "approvedAt": {
+      "type": ["number", "null"]
     }
   },
   "type": "object"
