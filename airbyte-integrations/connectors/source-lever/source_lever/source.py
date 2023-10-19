@@ -181,7 +181,7 @@ class Opportunities(IncrementalLeverStream):
 
     use_cache = True
     primary_key = "id"
-    stream_params = {"confidentiality": "all", "expand": ["contact", "applications"], "stage_id": "offer"}
+    stream_params = {"confidentiality": "all", "expand": ["contact", "applications"]}
 
     def path(
         self, stream_state: Mapping[str, Any] = None, stream_slice: Mapping[str, Any] = None, next_page_token: Mapping[str, Any] = None
