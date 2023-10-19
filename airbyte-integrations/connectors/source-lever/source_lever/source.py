@@ -159,8 +159,8 @@ class IncrementalLeverStream(LeverStream, IncrementalMixin):
 
     def read_records(self, *args, **kwargs) -> Iterable[Mapping[str, Any]]:
         for record in super().read_records(*args, **kwargs):
-            if self._cursor_value:
-                latest_record_date = record[self.cursor_field]
+            latest_record_date = record[self.cursor_field]
+            if self._cursor_value and record[self.cursor_field]:
                 self._cursor_value = max(int(self._cursor_value), int(latest_record_date))
             yield record
 
