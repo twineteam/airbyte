@@ -4,44 +4,44 @@
       "stream": {
         "name": "opportunities",
         "json_schema": {},
-        "supported_sync_modes": ["full_refresh"],
+        "supported_sync_modes": ["full_refresh", "incremental"],
         "source_defined_cursor": true,
         "source_defined_primary_key": [["id"]]
       },
-      "sync_mode": "full_refresh",
+      "sync_mode": "incremental",
       "destination_sync_mode": "append"
     },
     {
       "stream": {
         "name": "offers",
         "json_schema": {},
-        "supported_sync_modes": ["full_refresh"],
+        "supported_sync_modes": ["full_refresh", "incremental"],
         "source_defined_cursor": true,
         "source_defined_primary_key": [["id"]]
       },
-      "sync_mode": "full_refresh",
+      "sync_mode": "incremental",
       "destination_sync_mode": "append"
     },
     {
       "stream": {
         "name": "feedback",
         "json_schema": {},
-        "supported_sync_modes": ["full_refresh"],
+        "supported_sync_modes": ["full_refresh", "incremental"],
         "source_defined_cursor": true,
         "source_defined_primary_key": [["id"]]
       },
-      "sync_mode": "full_refresh",
+      "sync_mode": "incremental",
       "destination_sync_mode": "append"
     },
     {
       "stream": {
         "name": "interviews",
         "json_schema": {},
-        "supported_sync_modes": ["full_refresh"],
+        "supported_sync_modes": ["full_refresh", "incremental"],
         "source_defined_cursor": true,
         "source_defined_primary_key": [["id"]]
       },
-      "sync_mode": "full_refresh",
+      "sync_mode": "incremental",
       "destination_sync_mode": "append"
     },
     {
@@ -103,11 +103,11 @@
       "stream": {
         "name": "panels",
         "json_schema": {},
-        "supported_sync_modes": ["full_refresh"],
+        "supported_sync_modes": ["full_refresh", "incremental"],
         "source_defined_cursor": true,
         "source_defined_primary_key": [["id"]]
       },
-      "sync_mode": "full_refresh",
+      "sync_mode": "incremental",
       "destination_sync_mode": "append"
     },
     {
@@ -147,11 +147,11 @@
       "stream": {
         "name": "notes",
         "json_schema": {},
-        "supported_sync_modes": ["full_refresh"],
+        "supported_sync_modes": ["full_refresh", "incremental"],
         "source_defined_cursor": true,
         "source_defined_primary_key": [["id"]]
       },
-      "sync_mode": "full_refresh",
+      "sync_mode": "incremental",
       "destination_sync_mode": "append"
     }
   ]

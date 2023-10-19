@@ -5,7 +5,6 @@ connectionSpecification:
   type: object
   required:
     - api_key
-    - extract_start_date
   additionalProperties: true
   properties:
     api_key:
@@ -13,11 +12,3 @@ connectionSpecification:
       order: 0
       description: "The API key for the Lever account."
       airbyte_secret: true
-    extract_start_date:
-      type: string
-      order: 1
-      title: Extract Start Date
-      format: date
-      default: "1990-01-01"
-      pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}$
-      description: "The date to start getting data from. "
