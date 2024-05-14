@@ -1,0 +1,6 @@
+<wd:Get_Sexual_Orientations_Request xmlns:wd="urn:com.workday/bsvc" wd:version="v37.2">
+    <wd:Response_Filter>
+        <wd:Page>PAGE</wd:Page>
+        <wd:Count>PER_PAGE</wd:Count>
+    </wd:Response_Filter>
+</wd:Get_Sexual_Orientations_Request>

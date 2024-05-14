@@ -1,0 +1,7 @@
+<wd:Employee_Get wd:As_Of_Date="REQUEST_AS_OF_DATE" xmlns:wd="urn:com.workday/bsvc" wd:version="v37.2">
+    <wd:Employee_Reference>
+        <wd:Integration_ID_Reference wd:Descriptor="string">
+            <wd:ID wd:System_ID="WD-WID">PARENT_ID</wd:ID>
+        </wd:Integration_ID_Reference>
+    </wd:Employee_Reference>
+</wd:Employee_Get>

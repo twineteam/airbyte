@@ -1,0 +1,10 @@
+<wd:Get_Locations_Request xmlns:wd="urn:com.workday/bsvc" wd:version="v37.2">
+    <wd:Response_Filter>
+        <wd:Page>PAGE</wd:Page>
+        <wd:Count>PER_PAGE</wd:Count>
+    </wd:Response_Filter>
+    <wd:Response_Group>
+        <wd:Include_Reference>1</wd:Include_Reference>
+        <wd:Include_Location_Data>1</wd:Include_Location_Data>
+    </wd:Response_Group>
+</wd:Get_Locations_Request>
