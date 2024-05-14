@@ -24,8 +24,8 @@ class RequestConstructor:
         per_page: int = 200,
     ) -> str:
         specific_xml_content: str = self.read_xml_file(file_name)
-        if "PAGE" in specific_xml_content:
-            specific_xml_content = specific_xml_content.replace("PAGE", str(page))
+        if "PAGE_NUMBER" in specific_xml_content:
+            specific_xml_content = specific_xml_content.replace("PAGE_NUMBER", str(page))
         if "PER_PAGE" in specific_xml_content:
             specific_xml_content = specific_xml_content.replace("PER_PAGE", str(per_page))
 

@@ -6,7 +6,7 @@
     <wd:Response_Filter>
         <!-- Optional: -->
         <wd:As_Of_Effective_Date>9999-12-31</wd:As_Of_Effective_Date> 
-        <wd:Page>PAGE</wd:Page>
+        <wd:Page>PAGE_NUMBER</wd:Page>
         <wd:Count>PER_PAGE</wd:Count>
     </wd:Response_Filter>
 </wd:Get_Workers_Request>
