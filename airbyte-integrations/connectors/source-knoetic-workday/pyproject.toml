@@ -18,6 +18,9 @@ packages = [ { include = "source_knoetic_workday" }, {include = "main.py" } ]
 python = "^3.9,<3.12"
 airbyte-cdk = "^0"
 
+[tool.black]
+line-length = 120
+
 [tool.poetry.scripts]
 source-knoetic-workday = "source_knoetic_workday.run:run"
 

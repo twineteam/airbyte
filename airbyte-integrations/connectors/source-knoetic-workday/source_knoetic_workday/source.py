@@ -1,3 +1,4 @@
+import logging
 from abc import ABC
 from datetime import datetime
 from typing import Any, Iterable, List, Mapping, MutableMapping, Optional, Tuple
@@ -8,7 +9,10 @@ from airbyte_cdk.sources.streams import Stream
 from airbyte_cdk.sources.streams.call_rate import APIBudget
 from airbyte_cdk.sources.streams.http import HttpStream
 
-from .utils.requests import RequestConstructor
+from .utils.requests import WorkdayRequest
+
+logger = logging.getLogger(__name__)
+
 
 _INCOMING_DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
@@ -39,7 +43,7 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         username: str,
         password: str,
         base_snapshot_report: str,
-        request_constructor: RequestConstructor,
+        workday_request: WorkdayRequest,
         page: int = 1,
         per_page: int = 200,
         api_budget: APIBudget | None = None,
@@ -52,7 +56,7 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         self.username = username
         self.password = password
         self.base_snapshot_report = base_snapshot_report
-        self.request_constructor = request_constructor
+        self.workday_request = workday_request
         self.page = page
         self.per_page = per_page
         self.endpoint = f"{self.url}/{self.tenant}/Human_Resources/{self.api_version}"
@@ -77,10 +81,12 @@ class KnoeticWorkdayStream(HttpStream, ABC):
 
     def parse_response(self, response: requests.Response, **kwargs) -> Iterable[Mapping]:
         """
-        TODO: Override this method to define how a response is parsed.
-        :return an iterable containing each record in the response
+        Parsing the SOAP response and yielding the data.
         """
-        yield {}
+
+        response_json = self.workday_request.parse_response(response)
+
+        yield from response_json
 
     def path(
         self,
@@ -107,7 +113,7 @@ class Workers(KnoeticWorkdayStream):
         username: str,
         password: str,
         base_snapshot_report: str,
-        request_constructor: RequestConstructor,
+        workday_request: WorkdayRequest,
         page: int = 1,
         per_page: int = 200,
         api_budget: APIBudget | None = None,
@@ -118,7 +124,7 @@ class Workers(KnoeticWorkdayStream):
             username,
             password,
             base_snapshot_report,
-            request_constructor,
+            workday_request,
             page,
             per_page,
             api_budget,
@@ -149,7 +155,7 @@ class Workers(KnoeticWorkdayStream):
         Override to define the request body data for the request.
         """
 
-        return self.request_constructor.construct_body(
+        return self.workday_request.construct_request_body(
             "workers.xml",
             self.tenant,
             self.username,
@@ -207,13 +213,6 @@ class WorkerDetail(IncrementalKnoeticWorkdayStream):
     # TODO: Fill in the primary key. Required. This is usually a unique field in the stream, like an ID or a timestamp.
     primary_key = "employee_id"
 
-    def path(self, **kwargs) -> str:
-        """
-        TODO: Override this method to define the path this stream corresponds to.
-        E.g. if the url is https://example-api.com/v1/employees then this should return "single". Required.
-        """
-        return "employees"
-
     # TODO: implement stream_slices
 
 
@@ -255,6 +254,6 @@ class SourceKnoeticWorkday(AbstractSource):
                 password=password,
                 base_snapshot_report=base_snapshot_report,
                 per_page=per_page,
-                request_constructor=RequestConstructor(),
+                workday_request=WorkdayRequest(),
             )
         ]
