@@ -28,6 +28,7 @@ class KnoeticWorkdayStream(HttpStream, ABC):
     then you should have three classes:
     `class KnoeticWorkdayStream(HttpStream, ABC)` which is the current class
     `class Workers(KnoeticWorkdayStream)` contains behavior to pull data for workers using `Human_Resources/37.2`
+    `class OrganizationHierarchies(KnoeticWorkdayStream)` contains behavior to pull data for organization hierarchies using `Human_Resources/37.2`
 
     If some streams implement incremental sync, it is typical to create another class
     `class IncrementalKnoeticWorkdayStream((KnoeticWorkdayStream), ABC)` then have concrete stream
@@ -47,6 +48,7 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         page: int = 1,
         per_page: int = 200,
         api_budget: APIBudget | None = None,
+        stream_name: str = None,
     ):
         super().__init__(api_budget)
         self.api_version = "37.2"
@@ -60,6 +62,7 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         self.page = page
         self.per_page = per_page
         self.endpoint = f"{self.url}/{self.tenant}/Human_Resources/{self.api_version}"
+        self.stream_name = stream_name
 
     def next_page_token(self, response: requests.Response) -> Optional[Mapping[str, Any]]:
         """
@@ -84,7 +87,8 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         Parsing the SOAP response and yielding the data.
         """
 
-        response_json = self.workday_request.parse_response(response)
+        response_json = self.workday_request.parse_response(
+            response, self.stream_name)
 
         yield from response_json
 
@@ -128,6 +132,7 @@ class Workers(KnoeticWorkdayStream):
             page,
             per_page,
             api_budget,
+            stream_name="workers",
         )
 
     @property
@@ -162,6 +167,76 @@ class Workers(KnoeticWorkdayStream):
             self.password,
             self.page,
             self.per_page,
+            self.stream_name,
+        )
+
+
+class OrganizationHierarchies(KnoeticWorkdayStream):
+    """
+    Represents a collection of streams of `organization hierarchies` data from the Knoetic Workday source.
+    It inherits from the KnoeticWorkdayStream class.
+    """
+
+    primary_key = None
+
+    def __init__(
+        self,
+        tenant: str,
+        url: str,
+        username: str,
+        password: str,
+        base_snapshot_report: str,
+        workday_request: WorkdayRequest,
+        page: int = 1,
+        per_page: int = 200,
+        api_budget: APIBudget | None = None,
+    ):
+        super().__init__(
+            tenant,
+            url,
+            username,
+            password,
+            base_snapshot_report,
+            workday_request,
+            page,
+            per_page,
+            api_budget,
+            stream_name="organization_hierarchies",
+        )
+
+    @property
+    def url_base(self) -> str:
+        """
+        :return The base URL for the API.
+        """
+
+        return self.endpoint
+
+    @property
+    def http_method(self) -> str:
+        """
+        :return str: The HTTP method for the request. Default is "GET".
+        """
+        return "POST"
+
+    def request_body_data(
+        self,
+        stream_state: Mapping[str, Any] | None,
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None,
+    ) -> str:
+        """
+        Override to define the request body data for the request.
+        """
+
+        return self.workday_request.construct_request_body(
+            "organization_hierarchies.xml",
+            self.tenant,
+            self.username,
+            self.password,
+            self.page,
+            self.per_page,
+            self.stream_name,
         )
 
 
@@ -197,7 +272,8 @@ class IncrementalKnoeticWorkdayStream(KnoeticWorkdayStream, ABC):
         """
         state_value = max(
             current_stream_state.get(self.cursor_field, 0),
-            datetime.strptime(latest_record.get(self._cursor_field, ""), _INCOMING_DATETIME_FORMAT).timestamp(),
+            datetime.strptime(latest_record.get(
+                self._cursor_field, ""), _INCOMING_DATETIME_FORMAT).timestamp(),
         )
         return {self._cursor_field: state_value}
 
@@ -255,5 +331,14 @@ class SourceKnoeticWorkday(AbstractSource):
                 base_snapshot_report=base_snapshot_report,
                 per_page=per_page,
                 workday_request=WorkdayRequest(),
-            )
+            ),
+            OrganizationHierarchies(
+                tenant=tenant,
+                url=url,
+                username=username,
+                password=password,
+                base_snapshot_report=base_snapshot_report,
+                per_page=per_page,
+                workday_request=WorkdayRequest(),
+            ),
         ]
