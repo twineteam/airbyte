@@ -26,9 +26,10 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         - GET Human_Resources/37.2
 
     then you should have three classes:
-    `class KnoeticWorkdayStream(HttpStream, ABC)` which is the current class
-    `class Workers(KnoeticWorkdayStream)` contains behavior to pull data for workers using `Human_Resources/37.2`
-    `class OrganizationHierarchies(KnoeticWorkdayStream)` contains behavior to pull data for organization hierarchies using `Human_Resources/37.2`
+    - `class KnoeticWorkdayStream(HttpStream, ABC)` which is the current class
+    - `class Workers(KnoeticWorkdayStream)` contains behavior to pull data for workers using `Human_Resources/37.2`
+    - `class OrganizationHierarchies(KnoeticWorkdayStream)` contains behavior to pull data for
+    organization hierarchies using `Human_Resources/37.2`
 
     If some streams implement incremental sync, it is typical to create another class
     `class IncrementalKnoeticWorkdayStream((KnoeticWorkdayStream), ABC)` then have concrete stream
@@ -39,16 +40,17 @@ class KnoeticWorkdayStream(HttpStream, ABC):
 
     def __init__(
         self,
+        *,
         tenant: str,
         url: str,
         username: str,
         password: str,
+        stream_name: str,
         base_snapshot_report: str,
         workday_request: WorkdayRequest,
         page: int = 1,
         per_page: int = 200,
         api_budget: APIBudget | None = None,
-        stream_name: str = None,
     ):
         super().__init__(api_budget)
         self.api_version = "37.2"
@@ -61,7 +63,6 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         self.workday_request = workday_request
         self.page = page
         self.per_page = per_page
-        self.endpoint = f"{self.url}/{self.tenant}/Human_Resources/{self.api_version}"
         self.stream_name = stream_name
 
     def next_page_token(self, response: requests.Response) -> Optional[Mapping[str, Any]]:
@@ -82,15 +83,13 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         """
         return None
 
-    def parse_response(self, response: requests.Response, **kwargs) -> Iterable[Mapping]:
+    @property
+    def url_base(self) -> str:
         """
-        Parsing the SOAP response and yielding the data.
+        :return The base URL for the API.
         """
 
-        response_json = self.workday_request.parse_response(
-            response, self.stream_name)
-
-        yield from response_json
+        return f"{self.url}"
 
     def path(
         self,
@@ -99,7 +98,7 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         stream_slice: Mapping[str, Any] | None = None,
         next_page_token: Mapping[str, Any] | None = None,
     ) -> str:
-        return self.endpoint
+        return f"{self.tenant}/Human_Resources/{self.api_version}"
 
 
 class Workers(KnoeticWorkdayStream):
@@ -123,25 +122,17 @@ class Workers(KnoeticWorkdayStream):
         api_budget: APIBudget | None = None,
     ):
         super().__init__(
-            tenant,
-            url,
-            username,
-            password,
-            base_snapshot_report,
-            workday_request,
-            page,
-            per_page,
-            api_budget,
+            tenant=tenant,
             stream_name="workers",
+            url=url,
+            username=username,
+            password=password,
+            base_snapshot_report=base_snapshot_report,
+            workday_request=workday_request,
+            page=page,
+            per_page=per_page,
+            api_budget=api_budget,
         )
-
-    @property
-    def url_base(self) -> str:
-        """
-        :return The base URL for the API.
-        """
-
-        return self.endpoint
 
     @property
     def http_method(self) -> str:
@@ -169,6 +160,19 @@ class Workers(KnoeticWorkdayStream):
             self.per_page,
             self.stream_name,
         )
+
+    def parse_response(
+        self,
+        response: requests.Response,
+        *,
+        stream_state: Mapping[str, Any],
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None,
+    ) -> Iterable[Mapping[str, Any]]:
+
+        response_json = self.workday_request.parse_workers_response(response)
+
+        yield from response_json
 
 
 class OrganizationHierarchies(KnoeticWorkdayStream):
@@ -272,8 +276,7 @@ class IncrementalKnoeticWorkdayStream(KnoeticWorkdayStream, ABC):
         """
         state_value = max(
             current_stream_state.get(self.cursor_field, 0),
-            datetime.strptime(latest_record.get(
-                self._cursor_field, ""), _INCOMING_DATETIME_FORMAT).timestamp(),
+            datetime.strptime(latest_record.get(self._cursor_field, ""), _INCOMING_DATETIME_FORMAT).timestamp(),
         )
         return {self._cursor_field: state_value}
 
