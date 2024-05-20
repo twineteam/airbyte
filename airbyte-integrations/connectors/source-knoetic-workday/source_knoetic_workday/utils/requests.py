@@ -23,6 +23,10 @@ class WorkdayRequest:
                 "request_file": "organization_hierarchies.xml",
                 "parse_response": self.parse_organization_hierarchies_response,
             },
+            "ethnicities": {
+                "request_file": "ethnicities.xml",
+                "parse_response": self.parse_ethnicities_response,
+            },
         }
 
     def read_xml_file(self, filename: str) -> str:
@@ -251,3 +255,66 @@ class WorkdayRequest:
             )
 
         return organization_hierarchies
+
+    def parse_ethnicities_response(
+        self,
+        response_data: ET.Element,
+        namespaces: Dict[str, str]
+    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+
+        ethnicities: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+
+        if response_data is None:
+            return ethnicities
+
+        for ethnicity in response_data.findall("{urn:com.workday/bsvc}Ethnicity", namespaces):
+            ethnicity_reference_elem = ethnicity.find("{urn:com.workday/bsvc}Ethnicity_Reference", namespaces)
+            ethnicity_data_elem = ethnicity.find("{urn:com.workday/bsvc}Ethnicity_Data", namespaces)
+
+            ethnicity_reference = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                    }
+                    for id_elem in ethnicity_reference_elem.findall("{urn:com.workday/bsvc}ID", namespaces)
+                ]
+            }
+
+            location_reference = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                    }
+                    for id_elem in ethnicity_data_elem.find("{urn:com.workday/bsvc}Location_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                ] if ethnicity_data_elem.find("{urn:com.workday/bsvc}Location_Reference", namespaces) is not None else []
+            }
+
+            ethnicity_mapping_reference = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                    }
+                    for id_elem in ethnicity_data_elem.find("{urn:com.workday/bsvc}Ethnicity_Mapping_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                ] if ethnicity_data_elem.find("{urn:com.workday/bsvc}Ethnicity_Mapping_Reference", namespaces) is not None else []
+            }
+
+            ethnicity_data = {
+                "ID": ethnicity_data_elem.find("{urn:com.workday/bsvc}ID", namespaces).text if ethnicity_data_elem.find("{urn:com.workday/bsvc}ID", namespaces) is not None else None,
+                "Name": ethnicity_data_elem.find("{urn:com.workday/bsvc}Name", namespaces).text if ethnicity_data_elem.find("{urn:com.workday/bsvc}Name", namespaces) is not None else None,
+                "Description": ethnicity_data_elem.find("{urn:com.workday/bsvc}Description", namespaces).text if ethnicity_data_elem.find("{urn:com.workday/bsvc}Description", namespaces) is not None else None,
+                "Location_Reference": location_reference,
+                "Ethnicity_Mapping_Reference": ethnicity_mapping_reference,
+                "Inactive": ethnicity_data_elem.find("{urn:com.workday/bsvc}Inactive", namespaces).text if ethnicity_data_elem.find("{urn:com.workday/bsvc}Inactive", namespaces) is not None else None
+            }
+
+            ethnicities.append({
+                "Ethnicity_Reference": ethnicity_reference,
+                "Ethnicity_Data": ethnicity_data
+            })
+
+        print('ETHNICITIES RESPONSE!!!')
+        print(ethnicities)
+        return ethnicities
