@@ -371,7 +371,12 @@ class SourceKnoeticWorkday(AbstractSource):
         """
 
         tenant = config["tenant"]
+
+        # url should end with a trailing slash
         url = config["url"]
+        if not url.endswith("/"):
+            url = f"{url}/"
+
         username = config["username"]
         password = config["password"]
         base_snapshot_report = config["base_snapshot_report"]
