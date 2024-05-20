@@ -27,6 +27,10 @@ class WorkdayRequest:
                 "request_file": "ethnicities.xml",
                 "parse_response": self.parse_ethnicities_response,
             },
+            "gender_identities": {
+                "request_file": "gender_identities.xml",
+                "parse_response": self.parse_gender_identities_response,
+            }
         }
 
     def read_xml_file(self, filename: str) -> str:
@@ -315,6 +319,43 @@ class WorkdayRequest:
                 "Ethnicity_Data": ethnicity_data
             })
 
-        print('ETHNICITIES RESPONSE!!!')
-        print(ethnicities)
         return ethnicities
+    
+    def parse_gender_identities_response(
+    self,
+    response_data: ET.Element,
+    namespaces: Dict[str, str]
+    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+
+        gender_identities: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+
+        if response_data is None:
+            return gender_identities
+
+        for gender_identity in response_data.findall("{urn:com.workday/bsvc}Gender_Identity", namespaces):
+            gender_identity_reference_elem = gender_identity.find("{urn:com.workday/bsvc}Gender_Identity_Reference", namespaces)
+            gender_identity_data_elem = gender_identity.find("{urn:com.workday/bsvc}Gender_Identity_Data", namespaces)
+
+            gender_identity_reference = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                    }
+                    for id_elem in gender_identity_reference_elem.findall("{urn:com.workday/bsvc}ID", namespaces)
+                ]
+            }
+
+            gender_identity_data = {
+                "ID": gender_identity_data_elem.find("{urn:com.workday/bsvc}ID", namespaces).text if gender_identity_data_elem.find("{urn:com.workday/bsvc}ID", namespaces) is not None else None,
+                "Gender_Identity_Name": gender_identity_data_elem.find("{urn:com.workday/bsvc}Gender_Identity_Name", namespaces).text if gender_identity_data_elem.find("{urn:com.workday/bsvc}Gender_Identity_Name", namespaces) is not None else None,
+                "Gender_Identity_Code": gender_identity_data_elem.find("{urn:com.workday/bsvc}Gender_Identity_Code", namespaces).text if gender_identity_data_elem.find("{urn:com.workday/bsvc}Gender_Identity_Code", namespaces) is not None else None,
+                "Gender_Identity_Inactive": gender_identity_data_elem.find("{urn:com.workday/bsvc}Gender_Identity_Inactive", namespaces).text if gender_identity_data_elem.find("{urn:com.workday/bsvc}Gender_Identity_Inactive", namespaces) is not None else None
+            }
+
+            gender_identities.append({
+                "Gender_Identity_Reference": gender_identity_reference,
+                "Gender_Identity_Data": gender_identity_data
+            })
+
+        return gender_identities
