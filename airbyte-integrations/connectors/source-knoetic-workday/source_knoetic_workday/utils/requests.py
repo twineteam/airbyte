@@ -30,6 +30,10 @@ class WorkdayRequest:
             "gender_identities": {
                 "request_file": "gender_identities.xml",
                 "parse_response": self.parse_gender_identities_response,
+            },
+            "locations": {
+                "request_file": "locations.xml",
+                "parse_response": self.parse_locations_response,
             }
         }
 
@@ -359,3 +363,198 @@ class WorkdayRequest:
             })
 
         return gender_identities
+
+    def parse_locations_response(
+        self,
+        response_data: ET.Element,
+        namespaces: Dict[str, str]
+    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+        locations: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+
+        if response_data is None:
+            return locations
+
+        for location in response_data.findall("{urn:com.workday/bsvc}Location", namespaces):
+            location_reference_elem = location.find("{urn:com.workday/bsvc}Location_Reference", namespaces)
+            location_data_elem = location.find("{urn:com.workday/bsvc}Location_Data", namespaces)
+
+            location_reference = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                    }
+                    for id_elem in location_reference_elem.findall("{urn:com.workday/bsvc}ID", namespaces)
+                ]
+            }
+
+            location_usage_reference = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                    }
+                    for id_elem in location_data_elem.find("{urn:com.workday/bsvc}Location_Usage_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                ] if location_data_elem.find("{urn:com.workday/bsvc}Location_Usage_Reference", namespaces) is not None else []
+            }
+
+            location_type_reference = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                    }
+                    for id_elem in location_data_elem.find("{urn:com.workday/bsvc}Location_Type_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                ] if location_data_elem.find("{urn:com.workday/bsvc}Location_Type_Reference", namespaces) is not None else []
+            }
+
+            location_hierarchy_reference = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                    }
+                    for id_elem in location_data_elem.find("{urn:com.workday/bsvc}Location_Hierarchy_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                ] if location_data_elem.find("{urn:com.workday/bsvc}Location_Hierarchy_Reference", namespaces) is not None else []
+            }
+
+            time_profile_reference = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                    }
+                    for id_elem in location_data_elem.find("{urn:com.workday/bsvc}Time_Profile_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                ] if location_data_elem.find("{urn:com.workday/bsvc}Time_Profile_Reference", namespaces) is not None else []
+            }
+
+            integration_id_data = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-System_ID": id_elem.attrib.get("{urn:com.workday/bsvc}System_ID", "Unknown Type")
+                    }
+                    for id_elem in location_data_elem.find("{urn:com.workday/bsvc}Integration_ID_Data", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                ] if location_data_elem.find("{urn:com.workday/bsvc}Integration_ID_Data", namespaces) is not None else []
+            }
+
+            locale_reference = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                    }
+                    for id_elem in location_data_elem.find("{urn:com.workday/bsvc}Locale_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                ] if location_data_elem.find("{urn:com.workday/bsvc}Locale_Reference", namespaces) is not None else []
+            }
+
+            time_zone_reference = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                    }
+                    for id_elem in location_data_elem.find("{urn:com.workday/bsvc}Time_Zone_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                ] if location_data_elem.find("{urn:com.workday/bsvc}Time_Zone_Reference", namespaces) is not None else []
+            }
+
+            default_currency_reference = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                    }
+                    for id_elem in location_data_elem.find("{urn:com.workday/bsvc}Default_Currency_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                ] if location_data_elem.find("{urn:com.workday/bsvc}Default_Currency_Reference", namespaces) is not None else []
+            }
+
+            contact_data_elem = location_data_elem.find("{urn:com.workday/bsvc}Contact_Data", namespaces)
+            address_data_elem = contact_data_elem.find("{urn:com.workday/bsvc}Address_Data", namespaces) if contact_data_elem is not None else None
+            address_data = {
+                "-Address_Format_Type": address_data_elem.attrib.get("{urn:com.workday/bsvc}Address_Format_Type"),
+                "-Defaulted_Business_Site_Address": address_data_elem.attrib.get("{urn:com.workday/bsvc}Defaulted_Business_Site_Address"),
+                "-Effective_Date": address_data_elem.attrib.get("{urn:com.workday/bsvc}Effective_Date"),
+                "-Formatted_Address": address_data_elem.attrib.get("{urn:com.workday/bsvc}Formatted_Address"),
+                "Address_ID": address_data_elem.find("{urn:com.workday/bsvc}Address_ID", namespaces).text if address_data_elem.find("{urn:com.workday/bsvc}Address_ID", namespaces) is not None else None,
+                "Address_Line_Data": {
+                    "#content": address_data_elem.find("{urn:com.workday/bsvc}Address_Line_Data", namespaces).text if address_data_elem.find("{urn:com.workday/bsvc}Address_Line_Data", namespaces) is not None else None,
+                    "-Descriptor": address_data_elem.find("{urn:com.workday/bsvc}Address_Line_Data", namespaces).attrib.get("{urn:com.workday/bsvc}Descriptor"),
+                    "-Type": address_data_elem.find("{urn:com.workday/bsvc}Address_Line_Data", namespaces).attrib.get("{urn:com.workday/bsvc}Type")
+                },
+                "Address_Reference": {
+                    "ID": [
+                        {
+                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                        }
+                        for id_elem in address_data_elem.find("{urn:com.workday/bsvc}Address_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                    ] if address_data_elem.find("{urn:com.workday/bsvc}Address_Reference", namespaces) is not None else []
+                },
+                "Country_Reference": {
+                    "ID": [
+                        {
+                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                        }
+                        for id_elem in address_data_elem.find("{urn:com.workday/bsvc}Country_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                    ] if address_data_elem.find("{urn:com.workday/bsvc}Country_Reference", namespaces) is not None else []
+                },
+                "Country_Region_Reference": {
+                    "ID": [
+                        {
+                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                        }
+                        for id_elem in address_data_elem.find("{urn:com.workday/bsvc}Country_Region_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                    ] if address_data_elem.find("{urn:com.workday/bsvc}Country_Region_Reference", namespaces) is not None else []
+                },
+                "Country_Region_Descriptor": address_data_elem.find("{urn:com.workday/bsvc}Country_Region_Descriptor", namespaces).text if address_data_elem.find("{urn:com.workday/bsvc}Country_Region_Descriptor", namespaces) is not None else None,
+                "Last_Modified": address_data_elem.find("{urn:com.workday/bsvc}Last_Modified", namespaces).text if address_data_elem.find("{urn:com.workday/bsvc}Last_Modified", namespaces) is not None else None,
+                "Municipality": address_data_elem.find("{urn:com.workday/bsvc}Municipality", namespaces).text if address_data_elem.find("{urn:com.workday/bsvc}Municipality", namespaces) is not None else None,
+                "Number_of_Days": address_data_elem.find("{urn:com.workday/bsvc}Number_of_Days", namespaces).text if address_data_elem.find("{urn:com.workday/bsvc}Number_of_Days", namespaces) is not None else None,
+                "Postal_Code": address_data_elem.find("{urn:com.workday/bsvc}Postal_Code", namespaces).text if address_data_elem.find("{urn:com.workday/bsvc}Postal_Code", namespaces) is not None else None,
+                "Usage_Data": {
+                    "-Public": address_data_elem.find("{urn:com.workday/bsvc}Usage_Data", namespaces).attrib.get("{urn:com.workday/bsvc}Public"),
+                    "Type_Data": {
+                        "-Primary": address_data_elem.find("{urn:com.workday/bsvc}Usage_Data/{urn:com.workday/bsvc}Type_Data", namespaces).attrib.get("{urn:com.workday/bsvc}Primary"),
+                        "Type_Reference": {
+                            "ID": [
+                                {
+                                    "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                                    "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                                }
+                                for id_elem in address_data_elem.find("{urn:com.workday/bsvc}Usage_Data/{urn:com.workday/bsvc}Type_Data/{urn:com.workday/bsvc}Type_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                            ] if address_data_elem.find("{urn:com.workday/bsvc}Usage_Data/{urn:com.workday/bsvc}Type_Data/{urn:com.workday/bsvc}Type_Reference", namespaces) is not None else []
+                        }
+                    }
+                }
+            } if address_data_elem is not None else None
+
+            contact_data = {
+                "Address_Data": address_data
+            }
+
+            location_data = {
+                "Location_ID": location_data_elem.find("{urn:com.workday/bsvc}Location_ID", namespaces).text if location_data_elem.find("{urn:com.workday/bsvc}Location_ID", namespaces) is not None else None,
+                "Location_Name": location_data_elem.find("{urn:com.workday/bsvc}Location_Name", namespaces).text if location_data_elem.find("{urn:com.workday/bsvc}Location_Name", namespaces) is not None else None,
+                "Location_Usage_Reference": location_usage_reference,
+                "Location_Type_Reference": location_type_reference,
+                "Location_Hierarchy_Reference": location_hierarchy_reference,
+                "Integration_ID_Data": integration_id_data,
+                "Inactive": location_data_elem.find("{urn:com.workday/bsvc}Inactive", namespaces).text if location_data_elem.find("{urn:com.workday/bsvc}Inactive", namespaces) is not None else None,
+                "Latitude": location_data_elem.find("{urn:com.workday/bsvc}Latitude", namespaces).text if location_data_elem.find("{urn:com.workday/bsvc}Latitude", namespaces) is not None else None,
+                "Longitude": location_data_elem.find("{urn:com.workday/bsvc}Longitude", namespaces).text if location_data_elem.find("{urn:com.workday/bsvc}Longitude", namespaces) is not None else None,
+                "Altitude": location_data_elem.find("{urn:com.workday/bsvc}Altitude", namespaces).text if location_data_elem.find("{urn:com.workday/bsvc}Altitude", namespaces) is not None else None,
+                "Time_Profile_Reference": time_profile_reference,
+                "Locale_Reference": locale_reference,
+                "Time_Zone_Reference": time_zone_reference,
+                "Default_Currency_Reference": default_currency_reference,
+                "Contact_Data": contact_data,
+            }
+
+            locations.append({
+                "Location_Reference": location_reference,
+                "Location_Data": location_data
+            })
+
+        return locations
