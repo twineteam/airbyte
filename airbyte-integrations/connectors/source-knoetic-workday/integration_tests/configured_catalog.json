@@ -21,6 +21,39 @@
       },
       "sync_mode": "full_refresh",
       "destination_sync_mode": "overwrite"
+    },
+    {
+      "stream": {
+        "name": "ethnicities",
+        "json_schema": {},
+        "supported_sync_modes": [
+          "full_refresh"
+        ]
+      },
+      "sync_mode": "full_refresh",
+      "destination_sync_mode": "overwrite"
+    },
+    {
+      "stream": {
+        "name": "gender_identities",
+        "json_schema": {},
+        "supported_sync_modes": [
+          "full_refresh"
+        ]
+      },
+      "sync_mode": "full_refresh",
+      "destination_sync_mode": "overwrite"
+    },
+    {
+      "stream": {
+        "name": "locations",
+        "json_schema": {},
+        "supported_sync_modes": [
+          "full_refresh"
+        ]
+      },
+      "sync_mode": "full_refresh",
+      "destination_sync_mode": "overwrite"
     }
   ]
 }
