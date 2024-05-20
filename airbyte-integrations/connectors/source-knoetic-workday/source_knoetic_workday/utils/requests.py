@@ -1,6 +1,6 @@
 import os
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 import requests
 
@@ -14,7 +14,7 @@ class WorkdayRequest:
         self.base_template: str = self.read_xml_file("base.xml")
         self.header_template: str = self.read_xml_file("header.xml")
 
-        self.stream_mappings = {
+        self.stream_mappings: Dict[str, Dict[str, Union[str, Callable]]] = {
             "workers": {
                 "request_file": "workers.xml",
                 "parse_response": self.parse_workers_response,
@@ -37,15 +37,7 @@ class WorkdayRequest:
         password: str,
         page: int,
         per_page: int = 200,
-        stream_name: str = None,
     ) -> str:
-        # custom request bodies for certain streams
-        custom_construct_request_body = self.stream_mappings[stream_name].get("construct_request_body", None)
-        if custom_construct_request_body is not None:
-            return self.stream_mappings[stream_name]["construct_request_body"](
-                file_name, tenant, username, password, page, per_page
-            )
-
         specific_xml_content: str = self.read_xml_file(file_name)
         if "PAGE_NUMBER" in specific_xml_content:
             specific_xml_content = specific_xml_content.replace("PAGE_NUMBER", str(page))

@@ -45,7 +45,6 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         url: str,
         username: str,
         password: str,
-        stream_name: str,
         base_snapshot_report: str,
         workday_request: WorkdayRequest,
         page: int = 1,
@@ -63,7 +62,21 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         self.workday_request = workday_request
         self.page = page
         self.per_page = per_page
-        self.stream_name = stream_name
+
+    @property
+    def http_method(self) -> str:
+        """
+        :return str: The HTTP method for the request. Default is "GET".
+        """
+        return "POST"
+
+    @property
+    def url_base(self) -> str:
+        """
+        :return The base URL for the API.
+        """
+
+        return f"{self.url}"
 
     def next_page_token(self, response: requests.Response) -> Optional[Mapping[str, Any]]:
         """
@@ -82,14 +95,6 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         needed to query the next page in the response. If there are no more pages in the result, return None.
         """
         return None
-
-    @property
-    def url_base(self) -> str:
-        """
-        :return The base URL for the API.
-        """
-
-        return f"{self.url}"
 
     def path(
         self,
@@ -123,7 +128,6 @@ class Workers(KnoeticWorkdayStream):
     ):
         super().__init__(
             tenant=tenant,
-            stream_name="workers",
             url=url,
             username=username,
             password=password,
@@ -133,13 +137,6 @@ class Workers(KnoeticWorkdayStream):
             per_page=per_page,
             api_budget=api_budget,
         )
-
-    @property
-    def http_method(self) -> str:
-        """
-        :return str: The HTTP method for the request. Default is "GET".
-        """
-        return "POST"
 
     def request_body_data(
         self,
@@ -158,7 +155,6 @@ class Workers(KnoeticWorkdayStream):
             self.password,
             self.page,
             self.per_page,
-            self.stream_name,
         )
 
     def parse_response(
@@ -170,7 +166,7 @@ class Workers(KnoeticWorkdayStream):
         next_page_token: Mapping[str, Any] | None = None,
     ) -> Iterable[Mapping[str, Any]]:
 
-        response_json = self.workday_request.parse_workers_response(response)
+        response_json = self.workday_request.parse_response(response, stream_name="workers")
 
         yield from response_json
 
@@ -196,32 +192,16 @@ class OrganizationHierarchies(KnoeticWorkdayStream):
         api_budget: APIBudget | None = None,
     ):
         super().__init__(
-            tenant,
-            url,
-            username,
-            password,
-            base_snapshot_report,
-            workday_request,
-            page,
-            per_page,
-            api_budget,
-            stream_name="organization_hierarchies",
+            tenant=tenant,
+            url=url,
+            username=username,
+            password=password,
+            base_snapshot_report=base_snapshot_report,
+            workday_request=workday_request,
+            page=page,
+            per_page=per_page,
+            api_budget=api_budget,
         )
-
-    @property
-    def url_base(self) -> str:
-        """
-        :return The base URL for the API.
-        """
-
-        return self.endpoint
-
-    @property
-    def http_method(self) -> str:
-        """
-        :return str: The HTTP method for the request. Default is "GET".
-        """
-        return "POST"
 
     def request_body_data(
         self,
@@ -240,8 +220,18 @@ class OrganizationHierarchies(KnoeticWorkdayStream):
             self.password,
             self.page,
             self.per_page,
-            self.stream_name,
         )
+
+    def parse_response(
+        self,
+        response: requests.Response,
+        *,
+        stream_state: Mapping[str, Any],
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None,
+    ) -> Iterable[Mapping[str, Any]]:
+        response_json = self.workday_request.parse_response(response, stream_name="organization_hierarchies")
+        return response_json
 
 
 class IncrementalKnoeticWorkdayStream(KnoeticWorkdayStream, ABC):
