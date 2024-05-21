@@ -232,7 +232,8 @@ class OrganizationHierarchies(KnoeticWorkdayStream):
     ) -> Iterable[Mapping[str, Any]]:
         response_json = self.workday_request.parse_response(response, stream_name="organization_hierarchies")
         return response_json
-    
+
+
 class Ethnicities(KnoeticWorkdayStream):
     """
     Represents a collection of streams of `ethnicities` data from the Knoetic Workday source.
@@ -294,7 +295,8 @@ class Ethnicities(KnoeticWorkdayStream):
     ) -> Iterable[Mapping[str, Any]]:
         response_json = self.workday_request.parse_response(response, stream_name="ethnicities")
         return response_json
-    
+
+
 class GenderIdentities(KnoeticWorkdayStream):
     """
     Represents a collection of streams of `gender_identities` data from the Knoetic Workday source.
@@ -357,6 +359,7 @@ class GenderIdentities(KnoeticWorkdayStream):
         response_json = self.workday_request.parse_response(response, stream_name="gender_identities")
         return response_json
 
+
 class Locations(KnoeticWorkdayStream):
     """
     Represents a collection of streams of `locations` data from the Knoetic Workday source.
@@ -418,6 +421,7 @@ class Locations(KnoeticWorkdayStream):
     ) -> Iterable[Mapping[str, Any]]:
         response_json = self.workday_request.parse_response(response, stream_name="locations")
         return response_json
+
 
 class JobProfiles(KnoeticWorkdayStream):
     """
@@ -482,6 +486,7 @@ class JobProfiles(KnoeticWorkdayStream):
         return response_json
 
 
+# TODO (pebabion): Implement incremental streams
 class IncrementalKnoeticWorkdayStream(KnoeticWorkdayStream, ABC):
     """
     TODO: write docs
