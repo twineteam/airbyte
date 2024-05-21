@@ -34,6 +34,10 @@ class WorkdayRequest:
             "locations": {
                 "request_file": "locations.xml",
                 "parse_response": self.parse_locations_response,
+            },
+            "job_profiles": {
+                "request_file": "job_profiles.xml",
+                "parse_response": self.parse_job_profiles_response,
             }
         }
 
@@ -558,3 +562,188 @@ class WorkdayRequest:
             })
 
         return locations
+
+
+    def parse_job_profiles_response(
+        self,
+        response_data: ET.Element,
+        namespaces: Dict[str, str]
+    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+
+        job_profiles: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+
+        if response_data is None:
+            return job_profiles
+
+        for job_profile in response_data.findall("{urn:com.workday/bsvc}Job_Profile", namespaces):
+            job_profile_reference_elem = job_profile.find("{urn:com.workday/bsvc}Job_Profile_Reference", namespaces)
+            job_profile_data_elem = job_profile.find("{urn:com.workday/bsvc}Job_Profile_Data", namespaces)
+
+            job_profile_reference = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                    }
+                    for id_elem in job_profile_reference_elem.findall("{urn:com.workday/bsvc}ID", namespaces)
+                ] if job_profile_reference_elem is not None else []
+            }
+
+            job_profile_basic_data_elem = job_profile_data_elem.find("{urn:com.workday/bsvc}Job_Profile_Basic_Data", namespaces) if job_profile_data_elem is not None else None
+            job_profile_pay_rate_data_elem = job_profile_data_elem.find("{urn:com.workday/bsvc}Job_Profile_Pay_Rate_Data", namespaces) if job_profile_data_elem is not None else None
+            job_profile_exempt_data_elem = job_profile_data_elem.find("{urn:com.workday/bsvc}Job_Profile_Exempt_Data", namespaces) if job_profile_data_elem is not None else None
+            job_profile_compensation_data_elem = job_profile_data_elem.find("{urn:com.workday/bsvc}Job_Profile_Compensation_Data", namespaces) if job_profile_data_elem is not None else None
+            job_classification_data_elems = job_profile_data_elem.findall("{urn:com.workday/bsvc}Job_Classification_Data", namespaces) if job_profile_data_elem is not None else []
+            workers_compensation_code_replacement_data_elem = job_profile_data_elem.find("{urn:com.workday/bsvc}Workers_Compensation_Code_Replacement_Data", namespaces) if job_profile_data_elem is not None else None
+            
+            job_profile_basic_data = {}
+
+            if job_profile_basic_data_elem is not None:
+                job_profile_basic_data["Job_Title"] = job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Job_Title", namespaces).text
+                job_profile_basic_data["Inactive"] = job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Inactive", namespaces).text
+                job_profile_basic_data["Include_Job_Code_in_Name"] = job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Include_Job_Code_in_Name", namespaces).text
+                job_profile_basic_data["Work_Shift_Required"] = job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Work_Shift_Required", namespaces).text
+                job_profile_basic_data["Public_Job"] = job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Public_Job", namespaces).text
+                job_profile_basic_data["Critical_Job"] = job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Critical_Job", namespaces).text
+
+                job_family_data_elem = job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Job_Family_Data", namespaces)
+                job_family_data = {
+                    "Job_Family_Reference": {
+                        "ID": [
+                            {
+                                "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                                "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                            }
+                            for id_elem in job_family_data_elem.find("{urn:com.workday/bsvc}Job_Family_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                        ] if job_family_data_elem.find("{urn:com.workday/bsvc}Job_Family_Reference", namespaces) is not None else []
+                    }
+                } if job_family_data_elem is not None else None
+
+                job_level_reference = {
+                    "ID": [
+                        {
+                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                        }
+                        for id_elem in job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Job_Level_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                    ] if job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Job_Level_Reference", namespaces) is not None else []
+                }
+
+                management_level_reference = {
+                    "ID": [
+                        {
+                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                        }
+                        for id_elem in job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Management_Level_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                    ] if job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Management_Level_Reference", namespaces) is not None else []
+                }
+
+                referral_payment_plan_reference = {
+                    "ID": [
+                        {
+                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                        }
+                        for id_elem in job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Referral_Payment_Plan_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                    ] if job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Referral_Payment_Plan_Reference", namespaces) is not None else []
+                }
+
+                job_profile_basic_data["Job_Family_Data"] = job_family_data
+                job_profile_basic_data["Job_Level_Reference"] = job_level_reference
+                job_profile_basic_data["Management_Level_Reference"] = management_level_reference
+                job_profile_basic_data["Referral_Payment_Plan_Reference"] = referral_payment_plan_reference
+
+                job_description = job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Job_Description", namespaces) 
+                if job_description is not None:
+                    job_profile_basic_data["Job_Description"] = job_description.text
+
+            job_profile_pay_rate_data = {
+                "Country_Reference": {
+                    "ID": [
+                        {
+                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                        }
+                        for id_elem in job_profile_pay_rate_data_elem.find("{urn:com.workday/bsvc}Country_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                    ] if job_profile_pay_rate_data_elem is not None and job_profile_pay_rate_data_elem.find("{urn:com.workday/bsvc}Country_Reference", namespaces) is not None else []
+                },
+                "Pay_Rate_Type_Reference": {
+                    "ID": [
+                        {
+                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                        }
+                        for id_elem in job_profile_pay_rate_data_elem.find("{urn:com.workday/bsvc}Pay_Rate_Type_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                    ] if job_profile_pay_rate_data_elem is not None and job_profile_pay_rate_data_elem.find("{urn:com.workday/bsvc}Pay_Rate_Type_Reference", namespaces) is not None else []
+                }
+            } if job_profile_pay_rate_data_elem is not None else None
+            
+            workers_compensation_code_replacement_data = {
+                "Workers_Compensation_Code_Reference": {
+                    "ID": [
+                        {
+                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                        }
+                        for id_elem in workers_compensation_code_replacement_data_elem.find("{urn:com.workday/bsvc}Workers_Compensation_Code_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                    ] if workers_compensation_code_replacement_data_elem.find("{urn:com.workday/bsvc}Workers_Compensation_Code_Reference", namespaces) is not None else []
+                }
+            } if workers_compensation_code_replacement_data_elem is not None else None
+
+            job_profile_exempt_data = {
+                "Location_Context_Reference": {
+                    "ID": [
+                        {
+                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                        }
+                        for id_elem in job_profile_exempt_data_elem.find("{urn:com.workday/bsvc}Location_Context_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                    ] if job_profile_exempt_data_elem is not None and job_profile_exempt_data_elem.find("{urn:com.workday/bsvc}Location_Context_Reference", namespaces) is not None else []
+                },
+                "Job_Exempt": job_profile_exempt_data_elem.find("{urn:com.workday/bsvc}Job_Exempt", namespaces).text if job_profile_exempt_data_elem is not None else None
+            } if job_profile_exempt_data_elem is not None else None
+
+            job_profile_compensation_data = {
+                "Compensation_Grade_Reference": {
+                    "ID": [
+                        {
+                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                        }
+                        for id_elem in job_profile_compensation_data_elem.find("{urn:com.workday/bsvc}Compensation_Grade_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                    ] if job_profile_compensation_data_elem is not None and job_profile_compensation_data_elem.find("{urn:com.workday/bsvc}Compensation_Grade_Reference", namespaces) is not None else []
+                }
+            } if job_profile_compensation_data_elem is not None else None
+
+            job_classifications_data = [
+                {
+                    "Job_Classifications_Reference": {
+                        "ID": [
+                            {
+                                "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                                "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type")
+                            }
+                            for id_elem in job_classification_data_elem.find("{urn:com.workday/bsvc}Job_Classifications_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
+                        ] if job_classification_data_elem.find("{urn:com.workday/bsvc}Job_Classifications_Reference", namespaces) is not None else []
+                    }
+                } for job_classification_data_elem in job_classification_data_elems
+            ]
+
+            job_profile_data = {
+                "Job_Code": job_profile_data_elem.find("{urn:com.workday/bsvc}Job_Code", namespaces).text if job_profile_data_elem is not None else None,
+                "Effective_Date": job_profile_data_elem.find("{urn:com.workday/bsvc}Effective_Date", namespaces).text if job_profile_data_elem is not None else None,
+                "Job_Profile_Basic_Data": job_profile_basic_data,
+                "Job_Profile_Pay_Rate_Data": job_profile_pay_rate_data,
+                "Workers_Compensation_Code_Replacement_Data": workers_compensation_code_replacement_data,
+                "Job_Profile_Exempt_Data": job_profile_exempt_data,
+                "Job_Profile_Compensation_Data": job_profile_compensation_data,
+                "Job_Classification_Data": job_classifications_data,
+            }
+
+            job_profiles.append({
+                "Job_Profile_Reference": job_profile_reference,
+                "Job_Profile_Data": job_profile_data
+            })
+
+        return job_profiles
