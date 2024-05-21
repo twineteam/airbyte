@@ -23,13 +23,22 @@ class KnoeticWorkdayStream(HttpStream, ABC):
 
     Typically for REST APIs each stream corresponds to a resource in the API. For example if the API
     contains the endpoints
-        - GET Human_Resources/37.2
+        - POST Human_Resources/37.2
 
-    then you should have three classes:
+    then you should have these classes:
     - `class KnoeticWorkdayStream(HttpStream, ABC)` which is the current class
     - `class Workers(KnoeticWorkdayStream)` contains behavior to pull data for workers using `Human_Resources/37.2`
-    - `class OrganizationHierarchies(KnoeticWorkdayStream)` contains behavior to pull data for
-    organization hierarchies using `Human_Resources/37.2`
+    - `class OrganizationHierarchies(KnoeticWorkdayStream)` contains behavior to pull data for organization hierarchies using `Human_Resources/37.2`
+    - `class Ethnicities(KnoeticWorkdayStream)` contains behavior to pull data for ethnicities using `Human_Resources/37.2`
+    - `class GenderIdentities(KnoeticWorkdayStream)` contains behavior to pull data for gender identities using `Human_Resources/37.2`
+    - `class Locations(KnoeticWorkdayStream)` contains behavior to pull data for locations using `Human_Resources/37.2`
+    - `class JobProfiles(KnoeticWorkdayStream)` contains behavior to pull data for job profiles using `Human_Resources/37.2`
+
+    if the API contains the endpoints
+        - POST Staffing/37.2
+
+    then you should have these classes:
+    - `class Positions(KnoeticWorkdayStream)` contains behavior to pull data for positions using `Staffing/37.2`
 
     If some streams implement incremental sync, it is typical to create another class
     `class IncrementalKnoeticWorkdayStream((KnoeticWorkdayStream), ABC)` then have concrete stream
@@ -50,9 +59,11 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         page: int = 1,
         per_page: int = 200,
         api_budget: APIBudget | None = None,
+        web_service: str = "Human_Resources",
     ):
         super().__init__(api_budget)
         self.api_version = "37.2"
+        self.web_service = web_service
         self._cursor_field = "Last_Modified"
         self.tenant = tenant
         self.url = url
@@ -103,7 +114,7 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         stream_slice: Mapping[str, Any] | None = None,
         next_page_token: Mapping[str, Any] | None = None,
     ) -> str:
-        return f"{self.tenant}/Human_Resources/{self.api_version}"
+        return f"{self.tenant}/{self.web_service}/{self.api_version}"
 
 
 class Workers(KnoeticWorkdayStream):
@@ -485,6 +496,69 @@ class JobProfiles(KnoeticWorkdayStream):
         response_json = self.workday_request.parse_response(response, stream_name="job_profiles")
         return response_json
 
+class Positions(KnoeticWorkdayStream):
+    """
+    Represents a collection of streams of `positions` data from the Knoetic Workday source.
+    It inherits from the KnoeticWorkdayStream class.
+    """
+
+    primary_key = None
+
+    def __init__(
+        self,
+        tenant: str,
+        url: str,
+        username: str,
+        password: str,
+        base_snapshot_report: str,
+        workday_request: WorkdayRequest,
+        page: int = 1,
+        per_page: int = 200,
+        api_budget: APIBudget | None = None,
+    ):
+        super().__init__(
+            tenant=tenant,
+            url=url,
+            username=username,
+            password=password,
+            base_snapshot_report=base_snapshot_report,
+            workday_request=workday_request,
+            page=page,
+            per_page=per_page,
+            api_budget=api_budget,
+            web_service="Staffing"
+        )
+
+    def request_body_data(
+        self,
+        stream_state: Mapping[str, Any] | None,
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None,
+    ) -> str:
+        """
+        Override to define the request body data for the request.
+        """
+
+        return self.workday_request.construct_request_body(
+            "positions.xml",
+            self.tenant,
+            self.username,
+            self.password,
+            self.page,
+            self.per_page,
+        )
+
+    def parse_response(
+        self,
+        response: requests.Response,
+        *,
+        stream_state: Mapping[str, Any],
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None,
+    ) -> Iterable[Mapping[str, Any]]:
+        response_json = self.workday_request.parse_response(response, stream_name="positions")
+        return response_json
+
 
 # TODO (pebabion): Implement incremental streams
 class IncrementalKnoeticWorkdayStream(KnoeticWorkdayStream, ABC):
@@ -620,6 +694,15 @@ class SourceKnoeticWorkday(AbstractSource):
                 workday_request=WorkdayRequest(),
             ),
             JobProfiles(
+                tenant=tenant,
+                url=url,
+                username=username,
+                password=password,
+                base_snapshot_report=base_snapshot_report,
+                per_page=per_page,
+                workday_request=WorkdayRequest(),
+            ),
+            Positions(
                 tenant=tenant,
                 url=url,
                 username=username,

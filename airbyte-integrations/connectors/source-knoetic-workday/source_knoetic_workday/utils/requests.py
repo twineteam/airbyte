@@ -38,6 +38,10 @@ class WorkdayRequest:
             "job_profiles": {
                 "request_file": "job_profiles.xml",
                 "parse_response": self.parse_job_profiles_response,
+            },
+            "positions": {
+                "request_file": "positions.xml",
+                "parse_response": self.parse_positions_response,
             }
         }
 
@@ -747,3 +751,75 @@ class WorkdayRequest:
             })
 
         return job_profiles
+
+
+    def parse_positions_response(
+        self,
+        response_data: ET.Element,
+        namespaces: Dict[str, str]
+    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+
+        positions: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+
+        if response_data is None:
+            return positions
+
+        for position in response_data.findall("{urn:com.workday/bsvc}Position", namespaces):
+            position_reference_elem = position.find("{urn:com.workday/bsvc}Position_Reference", namespaces)
+            position_data_elem = position.find("{urn:com.workday/bsvc}Position_Data", namespaces)
+
+            position_reference = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
+                    }
+                    for id_elem in position_reference_elem.findall("{urn:com.workday/bsvc}ID", namespaces)
+                ]
+            } if position_reference_elem is not None else None
+
+            position_definition_data_elem = position_data_elem.find("{urn:com.workday/bsvc}Position_Definition_Data", namespaces) if position_data_elem is not None else None
+
+            position_definition_data = {
+                "Position_ID": position_definition_data_elem.find("{urn:com.workday/bsvc}Position_ID", namespaces).text if position_definition_data_elem is not None else None,
+                "Job_Posting_Title": position_definition_data_elem.find("{urn:com.workday/bsvc}Job_Posting_Title", namespaces).text if position_definition_data_elem is not None else None,
+                "Academic_Tenure_Eligible": position_definition_data_elem.find("{urn:com.workday/bsvc}Academic_Tenure_Eligible", namespaces).text if position_definition_data_elem is not None else None,
+                "Available_For_Hire": position_definition_data_elem.find("{urn:com.workday/bsvc}Available_For_Hire", namespaces).text if position_definition_data_elem is not None else None,
+                "Available_for_Recruiting": position_definition_data_elem.find("{urn:com.workday/bsvc}Available_for_Recruiting", namespaces).text if position_definition_data_elem is not None else None,
+                "Hiring_Freeze": position_definition_data_elem.find("{urn:com.workday/bsvc}Hiring_Freeze", namespaces).text if position_definition_data_elem is not None else None,
+                "Work_Shift_Required": position_definition_data_elem.find("{urn:com.workday/bsvc}Work_Shift_Required", namespaces).text if position_definition_data_elem is not None else None,
+                "Available_for_Overlap": position_definition_data_elem.find("{urn:com.workday/bsvc}Available_for_Overlap", namespaces).text if position_definition_data_elem is not None else None,
+                "Critical_Job": position_definition_data_elem.find("{urn:com.workday/bsvc}Critical_Job", namespaces).text if position_definition_data_elem is not None else None,
+            }
+            
+            position_status_reference = [
+                {
+                    "ID": {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
+                    }
+                } for id_elem in position_definition_data_elem.findall("{urn:com.workday/bsvc}Position_Status_Reference/{urn:com.workday/bsvc}ID", namespaces)
+            ]
+            position_definition_data["Position_Status_Reference"] = position_status_reference
+
+            position_data = {
+                "Supervisory_Organization_Reference": {
+                    "ID": [
+                        {
+                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
+                        }
+                        for id_elem in position_data_elem.findall("{urn:com.workday/bsvc}Supervisory_Organization_Reference/{urn:com.workday/bsvc}ID", namespaces)
+                    ] if position_data_elem is not None else []
+                },
+                "Effective_Date": position_data_elem.find("{urn:com.workday/bsvc}Effective_Date", namespaces).text if position_data_elem is not None else None,
+                "Position_Definition_Data": position_definition_data,
+                "Closed": position_data_elem.find("{urn:com.workday/bsvc}Closed", namespaces).text if position_data_elem is not None else None,
+            }
+
+            positions.append({
+                "Position_Reference": position_reference,
+                "Position_Data": position_data
+            })
+
+        return positions
