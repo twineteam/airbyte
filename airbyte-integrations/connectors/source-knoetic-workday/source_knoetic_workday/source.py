@@ -623,6 +623,95 @@ class SexualOrientations(KnoeticWorkdayStream):
         response_json = self.workday_request.parse_response(response, stream_name="sexual_orientations")
         return response_json
 
+class References(KnoeticWorkdayStream):
+    """
+    Represents a collection of streams of `references` data from the Knoetic Workday source.
+    It inherits from the KnoeticWorkdayStream class.
+    """
+
+    primary_key = None
+
+    def __init__(
+        self,
+        tenant: str,
+        url: str,
+        username: str,
+        password: str,
+        base_snapshot_report: str,
+        workday_request: WorkdayRequest,
+        page: int = 1,
+        per_page: int = 200,
+        api_budget: APIBudget | None = None,
+    ):
+        super().__init__(
+            tenant=tenant,
+            url=url,
+            username=username,
+            password=password,
+            base_snapshot_report=base_snapshot_report,
+            workday_request=workday_request,
+            page=page,
+            per_page=per_page,
+            api_budget=api_budget,
+            web_service="Integrations"
+        )
+        self.reference_types = [
+            "Contingent_Worker_Type_ID",
+            "Employee_Type_ID",
+            "Ethnicity_ID",
+            "Event_Classification_Subcategory_ID",
+            "Gender_Code",
+            "Job_Category_ID",
+            "Job_Family_ID",
+            "Job_Level_ID",
+            "Management_Level_ID",
+            "Marital_Status_ID",
+            "Organization_Subtype_ID",
+            "Organization_Type_ID"
+        ]
+        self.current_reference_type = None
+
+    def request_body_data(
+        self,
+        stream_state: Mapping[str, Any] | None,
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None,
+    ) -> str:
+        """
+        Override to define the request body data for the request.
+        """
+        # Stream slice per reference type
+        if stream_slice:
+            self.current_reference_type = stream_slice["reference_type"]
+        
+        return self.workday_request.construct_request_body(
+            "references.xml",
+            self.tenant,
+            self.username,
+            self.password,
+            self.page,
+            self.per_page
+        ).replace("REFERENCE_SUBCATEGORY_TYPE", self.current_reference_type)
+
+    def stream_slices(self, **kwargs) -> Iterable[Optional[Mapping[str, Any]]]:
+        """
+        Override to provide slices for each reference type.
+        """
+        return [{"reference_type": ref_type} for ref_type in self.reference_types]
+
+    def parse_response(
+        self,
+        response: requests.Response,
+        *,
+        stream_state: Mapping[str, Any],
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None,
+    ) -> Iterable[Mapping[str, Any]]:
+        response_json = self.workday_request.parse_response(response, stream_name="references")
+        for record in response_json:
+            yield record
+
+
 # TODO (pebabion): Implement incremental streams
 class IncrementalKnoeticWorkdayStream(KnoeticWorkdayStream, ABC):
     """
@@ -775,6 +864,15 @@ class SourceKnoeticWorkday(AbstractSource):
                 workday_request=WorkdayRequest(),
             ),
             SexualOrientations(
+                tenant=tenant,
+                url=url,
+                username=username,
+                password=password,
+                base_snapshot_report=base_snapshot_report,
+                per_page=per_page,
+                workday_request=WorkdayRequest(),
+            ),
+            References(
                 tenant=tenant,
                 url=url,
                 username=username,

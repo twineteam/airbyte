@@ -47,6 +47,10 @@ class WorkdayRequest:
                 "request_file": "sexual_orientations.xml",
                 "parse_response": self.parse_sexual_orientations_response,
             },
+            "references": {
+                "request_file": "references.xml",
+                "parse_response": self.parse_references_response,
+            },
         }
 
     def read_xml_file(self, filename: str) -> str:
@@ -70,7 +74,7 @@ class WorkdayRequest:
         username: str,
         password: str,
         page: int,
-        per_page: int = 200,
+        per_page: int = 200
     ) -> str:
         specific_xml_content: str = self.read_xml_file(file_name)
         if "PAGE_NUMBER" in specific_xml_content:
@@ -848,3 +852,43 @@ class WorkdayRequest:
             })
 
         return sexual_orientations
+
+    def parse_references_response(
+        self,
+        response_data: ET.Element,
+        namespaces: Dict[str, str]
+    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+
+        references: List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]] = []
+
+        if response_data is None:
+            return references
+
+        for reference in response_data.findall("{urn:com.workday/bsvc}Reference_ID", namespaces):
+            reference_descriptor = reference.attrib.get("{urn:com.workday/bsvc}Descriptor")
+            reference_id_reference_elem = reference.find("{urn:com.workday/bsvc}Reference_ID_Reference", namespaces)
+            reference_id_data_elem = reference.find("{urn:com.workday/bsvc}Reference_ID_Data", namespaces)
+
+            reference_id_reference = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
+                    }
+                    for id_elem in reference_id_reference_elem.findall("{urn:com.workday/bsvc}ID", namespaces)
+                ]
+            } if reference_id_reference_elem is not None else None
+
+            reference_id_data = {
+                "ID": self.safe_find_text(reference_id_data_elem, "{urn:com.workday/bsvc}ID", namespaces),
+                "Reference_ID_Type": self.safe_find_text(reference_id_data_elem, "{urn:com.workday/bsvc}Reference_ID_Type", namespaces),
+                "Referenced_Object_Descriptor": self.safe_find_text(reference_id_data_elem, "{urn:com.workday/bsvc}Referenced_Object_Descriptor", namespaces)
+            } if reference_id_data_elem is not None else None
+
+            references.append({
+                "-Descriptor": reference_descriptor,
+                "Reference_ID_Reference": reference_id_reference,
+                "Reference_ID_Data": reference_id_data
+            })
+
+        return references
