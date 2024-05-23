@@ -42,12 +42,26 @@ class WorkdayRequest:
             "positions": {
                 "request_file": "positions.xml",
                 "parse_response": self.parse_positions_response,
-            }
+            },
+            "sexual_orientations": {
+                "request_file": "sexual_orientations.xml",
+                "parse_response": self.parse_sexual_orientations_response,
+            },
         }
 
     def read_xml_file(self, filename: str) -> str:
         with open(os.path.join(self.base_path, filename), "r") as file:
             return file.read()
+    
+    
+    def safe_find_text(self, element: ET.Element, tag: str, namespaces: Dict[str, str]) -> Optional[str]:
+        """
+        Safely find the text of a tag in an element.
+        """
+        if element is None or element.find(tag, namespaces) is None:
+            return None
+        
+        return element.find(tag, namespaces).text 
 
     def construct_request_body(
         self,
@@ -138,42 +152,13 @@ class WorkdayRequest:
             }
 
             org_data = {
-                "Reference_ID": (
-                    org_data_elem.find("{urn:com.workday/bsvc}Reference_ID", namespaces).text
-                    if org_data_elem.find("{urn:com.workday/bsvc}Reference_ID", namespaces) is not None
-                    else None
-                ),
-                "Name": (
-                    org_data_elem.find("{urn:com.workday/bsvc}Name", namespaces).text
-                    if org_data_elem.find("{urn:com.workday/bsvc}Name", namespaces) is not None
-                    else None
-                ),
-                "Availibility_Date": (
-                    org_data_elem.find("{urn:com.workday/bsvc}Availibility_Date", namespaces).text
-                    if org_data_elem.find("{urn:com.workday/bsvc}Availibility_Date", namespaces) is not None
-                    else None
-                ),
-                "Last_Updated_DateTime": (
-                    org_data_elem.find("{urn:com.workday/bsvc}Last_Updated_DateTime", namespaces).text
-                    if org_data_elem.find("{urn:com.workday/bsvc}Last_Updated_DateTime", namespaces) is not None
-                    else None
-                ),
-                "Inactive": (
-                    org_data_elem.find("{urn:com.workday/bsvc}Inactive", namespaces).text
-                    if org_data_elem.find("{urn:com.workday/bsvc}Inactive", namespaces) is not None
-                    else None
-                ),
-                "Include_Manager_in_Name": (
-                    org_data_elem.find("{urn:com.workday/bsvc}Include_Manager_in_Name", namespaces).text
-                    if org_data_elem.find("{urn:com.workday/bsvc}Include_Manager_in_Name", namespaces) is not None
-                    else None
-                ),
-                "Include_Organization_Code_in_Name": (
-                    org_data_elem.find("{urn:com.workday/bsvc}Include_Organization_Code_in_Name", namespaces).text
-                    if org_data_elem.find("{urn:com.workday/bsvc}Include_Organization_Code_in_Name", namespaces)
-                    is not None
-                    else None
-                ),
+                "Reference_ID": self.safe_find_text(org_data_elem, "{urn:com.workday/bsvc}Reference_ID", namespaces),
+                "Name": self.safe_find_text(org_data_elem, "{urn:com.workday/bsvc}Name", namespaces),
+                "Availibility_Date": self.safe_find_text(org_data_elem, "{urn:com.workday/bsvc}Availibility_Date", namespaces),
+                "Last_Updated_DateTime": self.safe_find_text(org_data_elem, "{urn:com.workday/bsvc}Last_Updated_DateTime", namespaces),
+                "Inactive": self.safe_find_text(org_data_elem, "{urn:com.workday/bsvc}Inactive", namespaces),
+                "Include_Manager_in_Name": self.safe_find_text(org_data_elem, "{urn:com.workday/bsvc}Include_Manager_in_Name", namespaces),
+                "Include_Organization_Code_in_Name": self.safe_find_text(org_data_elem, "{urn:com.workday/bsvc}Include_Organization_Code_in_Name", namespaces),
                 "Organization_Type_Reference": {
                     "ID": (
                         [
@@ -318,12 +303,12 @@ class WorkdayRequest:
             }
 
             ethnicity_data = {
-                "ID": ethnicity_data_elem.find("{urn:com.workday/bsvc}ID", namespaces).text if ethnicity_data_elem.find("{urn:com.workday/bsvc}ID", namespaces) is not None else None,
-                "Name": ethnicity_data_elem.find("{urn:com.workday/bsvc}Name", namespaces).text if ethnicity_data_elem.find("{urn:com.workday/bsvc}Name", namespaces) is not None else None,
-                "Description": ethnicity_data_elem.find("{urn:com.workday/bsvc}Description", namespaces).text if ethnicity_data_elem.find("{urn:com.workday/bsvc}Description", namespaces) is not None else None,
+                "ID": self.safe_find_text(ethnicity_data_elem, "{urn:com.workday/bsvc}ID", namespaces),
+                "Name": self.safe_find_text(ethnicity_data_elem, "{urn:com.workday/bsvc}Name", namespaces),
+                "Description": self.safe_find_text(ethnicity_data_elem, "{urn:com.workday/bsvc}Description", namespaces),
                 "Location_Reference": location_reference,
                 "Ethnicity_Mapping_Reference": ethnicity_mapping_reference,
-                "Inactive": ethnicity_data_elem.find("{urn:com.workday/bsvc}Inactive", namespaces).text if ethnicity_data_elem.find("{urn:com.workday/bsvc}Inactive", namespaces) is not None else None
+                "Inactive": self.safe_find_text(ethnicity_data_elem, "{urn:com.workday/bsvc}Inactive", namespaces)
             }
 
             ethnicities.append({
@@ -359,10 +344,10 @@ class WorkdayRequest:
             }
 
             gender_identity_data = {
-                "ID": gender_identity_data_elem.find("{urn:com.workday/bsvc}ID", namespaces).text if gender_identity_data_elem.find("{urn:com.workday/bsvc}ID", namespaces) is not None else None,
-                "Gender_Identity_Name": gender_identity_data_elem.find("{urn:com.workday/bsvc}Gender_Identity_Name", namespaces).text if gender_identity_data_elem.find("{urn:com.workday/bsvc}Gender_Identity_Name", namespaces) is not None else None,
-                "Gender_Identity_Code": gender_identity_data_elem.find("{urn:com.workday/bsvc}Gender_Identity_Code", namespaces).text if gender_identity_data_elem.find("{urn:com.workday/bsvc}Gender_Identity_Code", namespaces) is not None else None,
-                "Gender_Identity_Inactive": gender_identity_data_elem.find("{urn:com.workday/bsvc}Gender_Identity_Inactive", namespaces).text if gender_identity_data_elem.find("{urn:com.workday/bsvc}Gender_Identity_Inactive", namespaces) is not None else None
+                "ID": self.safe_find_text(gender_identity_data_elem, "{urn:com.workday/bsvc}ID", namespaces),
+                "Gender_Identity_Name": self.safe_find_text(gender_identity_data_elem, "{urn:com.workday/bsvc}Gender_Identity_Name", namespaces),
+                "Gender_Identity_Code": self.safe_find_text(gender_identity_data_elem, "{urn:com.workday/bsvc}Gender_Identity_Code", namespaces),
+                "Gender_Identity_Inactive": self.safe_find_text(gender_identity_data_elem, "{urn:com.workday/bsvc}Gender_Identity_Inactive", namespaces)
             }
 
             gender_identities.append({
@@ -483,9 +468,9 @@ class WorkdayRequest:
                 "-Defaulted_Business_Site_Address": address_data_elem.attrib.get("{urn:com.workday/bsvc}Defaulted_Business_Site_Address"),
                 "-Effective_Date": address_data_elem.attrib.get("{urn:com.workday/bsvc}Effective_Date"),
                 "-Formatted_Address": address_data_elem.attrib.get("{urn:com.workday/bsvc}Formatted_Address"),
-                "Address_ID": address_data_elem.find("{urn:com.workday/bsvc}Address_ID", namespaces).text if address_data_elem.find("{urn:com.workday/bsvc}Address_ID", namespaces) is not None else None,
+                "Address_ID": self.safe_find_text(address_data_elem, "{urn:com.workday/bsvc}Address_ID", namespaces),
                 "Address_Line_Data": {
-                    "#content": address_data_elem.find("{urn:com.workday/bsvc}Address_Line_Data", namespaces).text if address_data_elem.find("{urn:com.workday/bsvc}Address_Line_Data", namespaces) is not None else None,
+                    "#content": self.safe_find_text(address_data_elem, "{urn:com.workday/bsvc}Address_Line_Data", namespaces),
                     "-Descriptor": address_data_elem.find("{urn:com.workday/bsvc}Address_Line_Data", namespaces).attrib.get("{urn:com.workday/bsvc}Descriptor"),
                     "-Type": address_data_elem.find("{urn:com.workday/bsvc}Address_Line_Data", namespaces).attrib.get("{urn:com.workday/bsvc}Type")
                 },
@@ -516,11 +501,11 @@ class WorkdayRequest:
                         for id_elem in address_data_elem.find("{urn:com.workday/bsvc}Country_Region_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
                     ] if address_data_elem.find("{urn:com.workday/bsvc}Country_Region_Reference", namespaces) is not None else []
                 },
-                "Country_Region_Descriptor": address_data_elem.find("{urn:com.workday/bsvc}Country_Region_Descriptor", namespaces).text if address_data_elem.find("{urn:com.workday/bsvc}Country_Region_Descriptor", namespaces) is not None else None,
-                "Last_Modified": address_data_elem.find("{urn:com.workday/bsvc}Last_Modified", namespaces).text if address_data_elem.find("{urn:com.workday/bsvc}Last_Modified", namespaces) is not None else None,
-                "Municipality": address_data_elem.find("{urn:com.workday/bsvc}Municipality", namespaces).text if address_data_elem.find("{urn:com.workday/bsvc}Municipality", namespaces) is not None else None,
-                "Number_of_Days": address_data_elem.find("{urn:com.workday/bsvc}Number_of_Days", namespaces).text if address_data_elem.find("{urn:com.workday/bsvc}Number_of_Days", namespaces) is not None else None,
-                "Postal_Code": address_data_elem.find("{urn:com.workday/bsvc}Postal_Code", namespaces).text if address_data_elem.find("{urn:com.workday/bsvc}Postal_Code", namespaces) is not None else None,
+                "Country_Region_Descriptor": self.safe_find_text(address_data_elem, "{urn:com.workday/bsvc}Country_Region_Descriptor", namespaces),
+                "Last_Modified": self.safe_find_text(address_data_elem, "{urn:com.workday/bsvc}Last_Modified", namespaces),
+                "Municipality": self.safe_find_text(address_data_elem, "{urn:com.workday/bsvc}Municipality", namespaces),
+                "Number_of_Days": self.safe_find_text(address_data_elem, "{urn:com.workday/bsvc}Number_of_Days", namespaces),
+                "Postal_Code": self.safe_find_text(address_data_elem, "{urn:com.workday/bsvc}Postal_Code", namespaces),
                 "Usage_Data": {
                     "-Public": address_data_elem.find("{urn:com.workday/bsvc}Usage_Data", namespaces).attrib.get("{urn:com.workday/bsvc}Public"),
                     "Type_Data": {
@@ -543,16 +528,16 @@ class WorkdayRequest:
             }
 
             location_data = {
-                "Location_ID": location_data_elem.find("{urn:com.workday/bsvc}Location_ID", namespaces).text if location_data_elem.find("{urn:com.workday/bsvc}Location_ID", namespaces) is not None else None,
-                "Location_Name": location_data_elem.find("{urn:com.workday/bsvc}Location_Name", namespaces).text if location_data_elem.find("{urn:com.workday/bsvc}Location_Name", namespaces) is not None else None,
+                "Location_ID": self.safe_find_text(location_data_elem, "{urn:com.workday/bsvc}Location_ID", namespaces),
+                "Location_Name": self.safe_find_text(location_data_elem, "{urn:com.workday/bsvc}Location_Name", namespaces),
                 "Location_Usage_Reference": location_usage_reference,
                 "Location_Type_Reference": location_type_reference,
                 "Location_Hierarchy_Reference": location_hierarchy_reference,
                 "Integration_ID_Data": integration_id_data,
-                "Inactive": location_data_elem.find("{urn:com.workday/bsvc}Inactive", namespaces).text if location_data_elem.find("{urn:com.workday/bsvc}Inactive", namespaces) is not None else None,
-                "Latitude": location_data_elem.find("{urn:com.workday/bsvc}Latitude", namespaces).text if location_data_elem.find("{urn:com.workday/bsvc}Latitude", namespaces) is not None else None,
-                "Longitude": location_data_elem.find("{urn:com.workday/bsvc}Longitude", namespaces).text if location_data_elem.find("{urn:com.workday/bsvc}Longitude", namespaces) is not None else None,
-                "Altitude": location_data_elem.find("{urn:com.workday/bsvc}Altitude", namespaces).text if location_data_elem.find("{urn:com.workday/bsvc}Altitude", namespaces) is not None else None,
+                "Inactive": self.safe_find_text(location_data_elem, "{urn:com.workday/bsvc}Inactive", namespaces),
+                "Latitude": self.safe_find_text(location_data_elem, "{urn:com.workday/bsvc}Latitude", namespaces),
+                "Longitude": self.safe_find_text(location_data_elem, "{urn:com.workday/bsvc}Longitude", namespaces),
+                "Altitude": self.safe_find_text(location_data_elem, "{urn:com.workday/bsvc}Altitude", namespaces),
                 "Time_Profile_Reference": time_profile_reference,
                 "Locale_Reference": locale_reference,
                 "Time_Zone_Reference": time_zone_reference,
@@ -603,12 +588,12 @@ class WorkdayRequest:
             job_profile_basic_data = {}
 
             if job_profile_basic_data_elem is not None:
-                job_profile_basic_data["Job_Title"] = job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Job_Title", namespaces).text
-                job_profile_basic_data["Inactive"] = job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Inactive", namespaces).text
-                job_profile_basic_data["Include_Job_Code_in_Name"] = job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Include_Job_Code_in_Name", namespaces).text
-                job_profile_basic_data["Work_Shift_Required"] = job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Work_Shift_Required", namespaces).text
-                job_profile_basic_data["Public_Job"] = job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Public_Job", namespaces).text
-                job_profile_basic_data["Critical_Job"] = job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Critical_Job", namespaces).text
+                job_profile_basic_data["Job_Title"] = self.safe_find_text(job_profile_basic_data_elem, "{urn:com.workday/bsvc}Job_Title", namespaces)
+                job_profile_basic_data["Inactive"] = self.safe_find_text(job_profile_basic_data_elem, "{urn:com.workday/bsvc}Inactive", namespaces)
+                job_profile_basic_data["Include_Job_Code_in_Name"] = self.safe_find_text(job_profile_basic_data_elem, "{urn:com.workday/bsvc}Include_Job_Code_in_Name", namespaces)
+                job_profile_basic_data["Work_Shift_Required"] = self.safe_find_text(job_profile_basic_data_elem, "{urn:com.workday/bsvc}Work_Shift_Required", namespaces)
+                job_profile_basic_data["Public_Job"] = self.safe_find_text(job_profile_basic_data_elem, "{urn:com.workday/bsvc}Public_Job", namespaces)
+                job_profile_basic_data["Critical_Job"] = self.safe_find_text(job_profile_basic_data_elem, "{urn:com.workday/bsvc}Critical_Job", namespaces)
 
                 job_family_data_elem = job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Job_Family_Data", namespaces)
                 job_family_data = {
@@ -705,7 +690,7 @@ class WorkdayRequest:
                         for id_elem in job_profile_exempt_data_elem.find("{urn:com.workday/bsvc}Location_Context_Reference", namespaces).findall("{urn:com.workday/bsvc}ID", namespaces)
                     ] if job_profile_exempt_data_elem is not None and job_profile_exempt_data_elem.find("{urn:com.workday/bsvc}Location_Context_Reference", namespaces) is not None else []
                 },
-                "Job_Exempt": job_profile_exempt_data_elem.find("{urn:com.workday/bsvc}Job_Exempt", namespaces).text if job_profile_exempt_data_elem is not None else None
+                "Job_Exempt": self.safe_find_text(job_profile_exempt_data_elem, "{urn:com.workday/bsvc}Job_Exempt", namespaces)
             } if job_profile_exempt_data_elem is not None else None
 
             job_profile_compensation_data = {
@@ -735,8 +720,8 @@ class WorkdayRequest:
             ]
 
             job_profile_data = {
-                "Job_Code": job_profile_data_elem.find("{urn:com.workday/bsvc}Job_Code", namespaces).text if job_profile_data_elem is not None else None,
-                "Effective_Date": job_profile_data_elem.find("{urn:com.workday/bsvc}Effective_Date", namespaces).text if job_profile_data_elem is not None else None,
+                "Job_Code": self.safe_find_text(job_profile_data_elem, "{urn:com.workday/bsvc}Job_Code", namespaces),
+                "Effective_Date": self.safe_find_text(job_profile_data_elem, "{urn:com.workday/bsvc}Effective_Date", namespaces),
                 "Job_Profile_Basic_Data": job_profile_basic_data,
                 "Job_Profile_Pay_Rate_Data": job_profile_pay_rate_data,
                 "Workers_Compensation_Code_Replacement_Data": workers_compensation_code_replacement_data,
@@ -781,15 +766,15 @@ class WorkdayRequest:
             position_definition_data_elem = position_data_elem.find("{urn:com.workday/bsvc}Position_Definition_Data", namespaces) if position_data_elem is not None else None
 
             position_definition_data = {
-                "Position_ID": position_definition_data_elem.find("{urn:com.workday/bsvc}Position_ID", namespaces).text if position_definition_data_elem is not None else None,
-                "Job_Posting_Title": position_definition_data_elem.find("{urn:com.workday/bsvc}Job_Posting_Title", namespaces).text if position_definition_data_elem is not None else None,
-                "Academic_Tenure_Eligible": position_definition_data_elem.find("{urn:com.workday/bsvc}Academic_Tenure_Eligible", namespaces).text if position_definition_data_elem is not None else None,
-                "Available_For_Hire": position_definition_data_elem.find("{urn:com.workday/bsvc}Available_For_Hire", namespaces).text if position_definition_data_elem is not None else None,
-                "Available_for_Recruiting": position_definition_data_elem.find("{urn:com.workday/bsvc}Available_for_Recruiting", namespaces).text if position_definition_data_elem is not None else None,
-                "Hiring_Freeze": position_definition_data_elem.find("{urn:com.workday/bsvc}Hiring_Freeze", namespaces).text if position_definition_data_elem is not None else None,
-                "Work_Shift_Required": position_definition_data_elem.find("{urn:com.workday/bsvc}Work_Shift_Required", namespaces).text if position_definition_data_elem is not None else None,
-                "Available_for_Overlap": position_definition_data_elem.find("{urn:com.workday/bsvc}Available_for_Overlap", namespaces).text if position_definition_data_elem is not None else None,
-                "Critical_Job": position_definition_data_elem.find("{urn:com.workday/bsvc}Critical_Job", namespaces).text if position_definition_data_elem is not None else None,
+                "Position_ID": self.safe_find_text(position_definition_data_elem, "{urn:com.workday/bsvc}Position_ID", namespaces),
+                "Job_Posting_Title": self.safe_find_text(position_definition_data_elem, "{urn:com.workday/bsvc}Job_Posting_Title", namespaces),
+                "Academic_Tenure_Eligible": self.safe_find_text(position_definition_data_elem, "{urn:com.workday/bsvc}Academic_Tenure_Eligible", namespaces),
+                "Available_For_Hire": self.safe_find_text(position_definition_data_elem, "{urn:com.workday/bsvc}Available_For_Hire", namespaces),
+                "Available_for_Recruiting": self.safe_find_text(position_definition_data_elem, "{urn:com.workday/bsvc}Available_for_Recruiting", namespaces),
+                "Hiring_Freeze": self.safe_find_text(position_definition_data_elem, "{urn:com.workday/bsvc}Hiring_Freeze", namespaces),
+                "Work_Shift_Required": self.safe_find_text(position_definition_data_elem, "{urn:com.workday/bsvc}Work_Shift_Required", namespaces),
+                "Available_for_Overlap": self.safe_find_text(position_definition_data_elem, "{urn:com.workday/bsvc}Available_for_Overlap", namespaces),
+                "Critical_Job": self.safe_find_text(position_definition_data_elem, "{urn:com.workday/bsvc}Critical_Job", namespaces),
             }
             
             position_status_reference = [
@@ -812,9 +797,9 @@ class WorkdayRequest:
                         for id_elem in position_data_elem.findall("{urn:com.workday/bsvc}Supervisory_Organization_Reference/{urn:com.workday/bsvc}ID", namespaces)
                     ] if position_data_elem is not None else []
                 },
-                "Effective_Date": position_data_elem.find("{urn:com.workday/bsvc}Effective_Date", namespaces).text if position_data_elem is not None else None,
+                "Effective_Date": self.safe_find_text(position_data_elem, "{urn:com.workday/bsvc}Effective_Date", namespaces),
                 "Position_Definition_Data": position_definition_data,
-                "Closed": position_data_elem.find("{urn:com.workday/bsvc}Closed", namespaces).text if position_data_elem is not None else None,
+                "Closed": self.safe_find_text(position_data_elem, "{urn:com.workday/bsvc}Closed", namespaces),
             }
 
             positions.append({
@@ -823,3 +808,43 @@ class WorkdayRequest:
             })
 
         return positions
+    
+    def parse_sexual_orientations_response(
+        self,
+        response_data: ET.Element,
+        namespaces: Dict[str, str]
+    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+
+        sexual_orientations: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+
+        if response_data is None:
+            return sexual_orientations
+
+        for orientation in response_data.findall("{urn:com.workday/bsvc}Sexual_Orientation", namespaces):
+            orientation_reference_elem = orientation.find("{urn:com.workday/bsvc}Sexual_Orientation_Reference", namespaces)
+            orientation_data_elem = orientation.find("{urn:com.workday/bsvc}Sexual_Orientation_Data", namespaces)
+
+            orientation_reference = {
+                "ID": [
+                    {
+                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
+                    }
+                    for id_elem in orientation_reference_elem.findall("{urn:com.workday/bsvc}ID", namespaces)
+                ]
+            } if orientation_reference_elem is not None else None
+
+            orientation_data = {}
+            if orientation_data_elem is not None:
+                orientation_data["ID"] = self.safe_find_text(orientation_data_elem, "{urn:com.workday/bsvc}ID", namespaces)
+                orientation_data["Sexual_Orientation_Name"] = self.safe_find_text(orientation_data_elem, "{urn:com.workday/bsvc}Sexual_Orientation_Name", namespaces)
+                orientation_data["Sexual_Orientation_Code"] = self.safe_find_text(orientation_data_elem, "{urn:com.workday/bsvc}Sexual_Orientation_Code", namespaces)
+                orientation_data["Sexual_Orientation_Description"] = self.safe_find_text(orientation_data_elem, "{urn:com.workday/bsvc}Sexual_Orientation_Description", namespaces)
+                orientation_data["Sexual_Orientation_Inactive"] = self.safe_find_text(orientation_data_elem, "{urn:com.workday/bsvc}Sexual_Orientation_Inactive", namespaces)
+
+            sexual_orientations.append({
+                "Sexual_Orientation_Reference": orientation_reference,
+                "Sexual_Orientation_Data": orientation_data
+            })
+
+        return sexual_orientations

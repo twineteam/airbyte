@@ -33,6 +33,7 @@ class KnoeticWorkdayStream(HttpStream, ABC):
     - `class GenderIdentities(KnoeticWorkdayStream)` contains behavior to pull data for gender identities using `Human_Resources/37.2`
     - `class Locations(KnoeticWorkdayStream)` contains behavior to pull data for locations using `Human_Resources/37.2`
     - `class JobProfiles(KnoeticWorkdayStream)` contains behavior to pull data for job profiles using `Human_Resources/37.2`
+    - `class SexualOrientations(KnoeticWorkdayStream)` contains behavior to pull data for sexual orientations using `Human_Resources/37.2`
 
     if the API contains the endpoints
         - POST Staffing/37.2
@@ -560,6 +561,68 @@ class Positions(KnoeticWorkdayStream):
         return response_json
 
 
+class SexualOrientations(KnoeticWorkdayStream):
+    """
+    Represents a collection of streams of `positions` data from the Knoetic Workday source.
+    It inherits from the KnoeticWorkdayStream class.
+    """
+
+    primary_key = None
+
+    def __init__(
+        self,
+        tenant: str,
+        url: str,
+        username: str,
+        password: str,
+        base_snapshot_report: str,
+        workday_request: WorkdayRequest,
+        page: int = 1,
+        per_page: int = 200,
+        api_budget: APIBudget | None = None,
+    ):
+        super().__init__(
+            tenant=tenant,
+            url=url,
+            username=username,
+            password=password,
+            base_snapshot_report=base_snapshot_report,
+            workday_request=workday_request,
+            page=page,
+            per_page=per_page,
+            api_budget=api_budget
+        )
+
+    def request_body_data(
+        self,
+        stream_state: Mapping[str, Any] | None,
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None,
+    ) -> str:
+        """
+        Override to define the request body data for the request.
+        """
+
+        return self.workday_request.construct_request_body(
+            "sexual_orientations.xml",
+            self.tenant,
+            self.username,
+            self.password,
+            self.page,
+            self.per_page,
+        )
+
+    def parse_response(
+        self,
+        response: requests.Response,
+        *,
+        stream_state: Mapping[str, Any],
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None,
+    ) -> Iterable[Mapping[str, Any]]:
+        response_json = self.workday_request.parse_response(response, stream_name="sexual_orientations")
+        return response_json
+
 # TODO (pebabion): Implement incremental streams
 class IncrementalKnoeticWorkdayStream(KnoeticWorkdayStream, ABC):
     """
@@ -711,4 +774,13 @@ class SourceKnoeticWorkday(AbstractSource):
                 per_page=per_page,
                 workday_request=WorkdayRequest(),
             ),
+            SexualOrientations(
+                tenant=tenant,
+                url=url,
+                username=username,
+                password=password,
+                base_snapshot_report=base_snapshot_report,
+                per_page=per_page,
+                workday_request=WorkdayRequest(),
+            )
         ]
