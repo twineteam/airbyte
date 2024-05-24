@@ -931,8 +931,12 @@ class WorkdayRequest:
         self,
         response: requests.Response
     ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+        
         xml_data = response.text
         root = ET.fromstring(xml_data)
+
+        namespaces = self.get_namespaces(root)
+        namespace_tag = namespaces["wd"]
 
         main_compensation_tag = ""
         sub_compensation_tag = ""
@@ -944,10 +948,6 @@ class WorkdayRequest:
         elif "Job_History_from_Previous_System_group" in xml_data and "Job_Position_History_Record_from_Previous_System" in xml_data:
             main_compensation_tag = "Job_History_from_Previous_System_group"
             sub_compensation_tag = "Job_Position_History_Record_from_Previous_System"
-
-
-        namespaces = self.get_namespaces(root)
-        namespace_tag = namespaces["wd"]
 
         compensation_records: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
 
@@ -1028,8 +1028,6 @@ class WorkdayRequest:
             
             compensation_records.append(record)
 
-        print('Compensation Records!!!')
-        print(compensation_records)
         return compensation_records
 
 
