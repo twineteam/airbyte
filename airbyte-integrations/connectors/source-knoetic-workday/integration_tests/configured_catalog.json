@@ -101,7 +101,7 @@
     },
     {
       "stream": {
-        "name": "base_snapshot_report",
+        "name": "base_custom_report",
         "json_schema": {},
         "supported_sync_modes": [
           "full_refresh"

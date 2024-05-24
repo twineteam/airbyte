@@ -2,6 +2,7 @@ import os
 import xml.etree.ElementTree as ET
 from typing import Callable, Dict, List, Optional, Union
 
+import csv
 import requests
 
 CURRENT_DIR: str = os.path.dirname(os.path.realpath(__file__))
@@ -51,12 +52,31 @@ class WorkdayRequest:
                 "request_file": "references.xml",
                 "parse_response": self.parse_references_response,
             },
+            "base_snapshot_report": {
+                "parse_response": self.parse_base_snapshot_report_response,
+            },
+            "base_historical_report_compensation": {
+                "parse_response": self.parse_base_historical_report_compensation_response,
+            },
+            "base_historical_report_job": {
+                "parse_response": self.parse_base_historical_report_job_response,
+            },
         }
 
     def read_xml_file(self, filename: str) -> str:
         with open(os.path.join(self.base_path, filename), "r") as file:
             return file.read()
     
+    def get_namespaces(self, element: ET.Element) -> Dict[str, str]:
+        """
+        Extracts namespaces from the XML element.
+        """
+        namespaces = {}
+        for ns in element.iter():
+            if ns.tag.startswith("{"):
+                uri, tag = ns.tag[1:].split("}")
+                namespaces[uri] = uri
+        return {"wd": list(namespaces.keys())[0]}
     
     def safe_find_text(self, element: ET.Element, tag: str, namespaces: Dict[str, str]) -> Optional[str]:
         """
@@ -91,15 +111,20 @@ class WorkdayRequest:
         if response.status_code != 200:
             raise requests.exceptions.HTTPError(f"Request failed with status code {response.status_code}.")
 
-        xml_data = response.text
-        root = ET.fromstring(xml_data)
+        try:
+            xml_data = response.text
+            root = ET.fromstring(xml_data)
 
-        namespaces = {"env": "http://schemas.xmlsoap.org/soap/envelope/", "wd": "urn:com.workday/bsvc"}
+            namespaces = {"env": "http://schemas.xmlsoap.org/soap/envelope/", "wd": "urn:com.workday/bsvc"}
 
-        response_data = root.find(".//{urn:com.workday/bsvc}Response_Data", namespaces)
+            response_data = root.find(".//{urn:com.workday/bsvc}Response_Data", namespaces)
 
-        custom_parse_response_function = self.stream_mappings[stream_name].get("parse_response")
-        return custom_parse_response_function(response_data, namespaces)
+            custom_parse_response_function = self.stream_mappings[stream_name].get("parse_response")
+            return custom_parse_response_function(response_data, namespaces)
+
+        except:
+            custom_parse_response_function = self.stream_mappings[stream_name].get("parse_response")
+            return custom_parse_response_function(response)
 
     def parse_workers_response(
         self, response_data: ET.Element, namespaces: Dict[str, str]
@@ -892,3 +917,127 @@ class WorkdayRequest:
             })
 
         return references
+
+    def parse_base_snapshot_report_response(
+        self,
+        response: requests.Response
+    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+        response_csv = response.content.decode("utf-8")
+        reader = csv.DictReader(response_csv.splitlines())
+
+        return [row for row in reader]
+
+    def parse_base_historical_report_compensation_response(
+        self,
+        response: requests.Response
+    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+        xml_data = response.text
+        root = ET.fromstring(xml_data)
+
+        main_compensation_tag = ""
+        sub_compensation_tag = ""
+
+        # Tags can vary depending on the way the Workday integration was setup
+        if "Compensation_History_-_Previous_System_group" in xml_data and "Compensation_History_Record_from_Previous_System" in xml_data:
+            main_compensation_tag = "Compensation_History_-_Previous_System_group"
+            sub_compensation_tag = "Compensation_History_Record_from_Previous_System"
+        elif "Job_History_from_Previous_System_group" in xml_data and "Job_Position_History_Record_from_Previous_System" in xml_data:
+            main_compensation_tag = "Job_History_from_Previous_System_group"
+            sub_compensation_tag = "Job_Position_History_Record_from_Previous_System"
+
+
+        namespaces = self.get_namespaces(root)
+        namespace_tag = namespaces["wd"]
+
+        compensation_records: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+
+        for report_entry in root.findall(f".//{{{namespace_tag}}}Report_Entry", namespaces):
+            employee_id = self.safe_find_text(report_entry, f"{{{namespace_tag}}}Employee_ID", namespaces)
+            worker_elem = report_entry.find(f"{{{namespace_tag}}}Worker", namespaces)
+            worker_descriptor = worker_elem.attrib.get(f"{{{namespace_tag}}}Descriptor") if worker_elem is not None else None
+            worker_ids = [
+                {
+                    "-type": id_elem.attrib.get(f"{{{namespace_tag}}}type"),
+                    "#content": id_elem.text
+                }
+                for id_elem in worker_elem.findall(f"{{{namespace_tag}}}ID", namespaces)
+            ] if worker_elem is not None else []
+
+            compensation_history = []
+            for history_elem in report_entry.findall(f"{{{namespace_tag}}}{main_compensation_tag}", namespaces):
+                compensation_history_entry_elem = history_elem.find(f"{{{namespace_tag}}}{sub_compensation_tag}", namespaces)
+                currency_elem = history_elem.find(f"{{{namespace_tag}}}Currency", namespaces)
+                frequency_elem = history_elem.find(f"{{{namespace_tag}}}Frequency", namespaces)
+
+                compensation_history_item = {
+                    "Worker_History_Name": self.safe_find_text(history_elem, f"{{{namespace_tag}}}Worker_History_Name", namespaces),
+                    "Effective_Date": self.safe_find_text(history_elem, f"{{{namespace_tag}}}Effective_Date", namespaces),
+                    "Reason": self.safe_find_text(history_elem, f"{{{namespace_tag}}}Reason", namespaces),
+                    "Amount": self.safe_find_text(history_elem, f"{{{namespace_tag}}}Amount", namespaces),
+                    "Amount_Change": self.safe_find_text(history_elem, f"{{{namespace_tag}}}Amount_Change", namespaces),
+                }
+
+                if compensation_history_entry_elem is not None:
+                    compensation_history_item[sub_compensation_tag] = {
+                        "-Descriptor": compensation_history_entry_elem.attrib.get(f"{{{namespace_tag}}}Descriptor"),
+                        "ID": [
+                            {
+                                "-type": id_elem.attrib.get(f"{{{namespace_tag}}}type"),
+                                "#content": id_elem.text
+                            }
+                            for id_elem in compensation_history_entry_elem.findall(f"{{{namespace_tag}}}ID", namespaces)
+                        ],
+                    }
+
+                if currency_elem is not None:
+                    compensation_history_item["Currency"] = {
+                        "-Descriptor": currency_elem.attrib.get(f"{{{namespace_tag}}}Descriptor"),
+                        "ID": [
+                            {
+                                "-type": id_elem.attrib.get(f"{{{namespace_tag}}}type"),
+                                "#content": id_elem.text
+                            }
+                            for id_elem in currency_elem.findall(f"{{{namespace_tag}}}ID", namespaces)
+                        ]
+                    }
+                
+                if frequency_elem is not None:
+                    compensation_history_item["Frequency"] = {
+                        "-Descriptor": frequency_elem.attrib.get(f"{{{namespace_tag}}}Descriptor"),
+                        "ID": [
+                            {
+                                "-type": id_elem.attrib.get(f"{{{namespace_tag}}}type"),
+                                "#content": id_elem.text
+                            }
+                            for id_elem in frequency_elem.findall(f"{{{namespace_tag}}}ID", namespaces)
+                        ]
+                    }
+
+                compensation_history.append(compensation_history_item)
+
+            record = {
+                "Employee_ID": employee_id,
+                "Worker": {
+                    "-Descriptor": worker_descriptor,
+                    "ID": worker_ids
+                }
+            }
+
+            if len(compensation_history) > 0:
+                record[main_compensation_tag] = compensation_history
+            
+            compensation_records.append(record)
+
+        print('Compensation Records!!!')
+        print(compensation_records)
+        return compensation_records
+
+
+    
+    def parse_base_historical_report_job_response(
+        self,
+        response: requests.Response
+    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+        # TODO - @erbzz to implement this
+
+        return []

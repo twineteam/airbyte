@@ -8,7 +8,6 @@ connectionSpecification:
     - url
     - username
     - password
-    - base_snapshot_report
 
   properties:
     tenant:
@@ -31,6 +30,14 @@ connectionSpecification:
     base_snapshot_report:
       type: string
       description: The name of the base snapshot report
+    
+    base_historical_report_compensation:
+      type: string
+      description: The name of the base historical report compensation
+    
+    base_historical_report_job:
+      type: string
+      description: The name of the base historical report job
 
     per_page:
       type: integer

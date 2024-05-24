@@ -4,7 +4,6 @@ from datetime import datetime
 from typing import Any, Iterable, List, Mapping, MutableMapping, Optional, Tuple
 
 import base64
-import csv
 import requests
 from airbyte_cdk.sources import AbstractSource
 from airbyte_cdk.sources.streams import Stream
@@ -54,7 +53,10 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         - GET customreport2
     
     then you should have these classes:
-    - `class BaseSnapshotReport(KnoeticWorkdayStream)` contains behavior to pull data for a base snapshot report using `customreport2`
+    - `class BaseCustomReport(KnoeticWorkdayStream)` contains behavior to pull data for:
+        - a base snapshot report using `customreport2`
+        - a base historical report for compensation using `customreport2`
+        - a base historical report for job using `customreport2`
 
     If some streams implement incremental sync, it is typical to create another class
     `class IncrementalKnoeticWorkdayStream((KnoeticWorkdayStream), ABC)` then have concrete stream
@@ -70,7 +72,6 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         url: str,
         username: str,
         password: str,
-        base_snapshot_report: str,
         workday_request: WorkdayRequest,
         page: int = 1,
         per_page: int = 200,
@@ -85,7 +86,6 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         self.url = url
         self.username = username
         self.password = password
-        self.base_snapshot_report = base_snapshot_report
         self.workday_request = workday_request
         self.page = page
         self.per_page = per_page
@@ -147,7 +147,6 @@ class Workers(KnoeticWorkdayStream):
         url: str,
         username: str,
         password: str,
-        base_snapshot_report: str,
         workday_request: WorkdayRequest,
         page: int = 1,
         per_page: int = 200,
@@ -158,7 +157,6 @@ class Workers(KnoeticWorkdayStream):
             url=url,
             username=username,
             password=password,
-            base_snapshot_report=base_snapshot_report,
             workday_request=workday_request,
             page=page,
             per_page=per_page,
@@ -212,7 +210,6 @@ class OrganizationHierarchies(KnoeticWorkdayStream):
         url: str,
         username: str,
         password: str,
-        base_snapshot_report: str,
         workday_request: WorkdayRequest,
         page: int = 1,
         per_page: int = 200,
@@ -223,7 +220,6 @@ class OrganizationHierarchies(KnoeticWorkdayStream):
             url=url,
             username=username,
             password=password,
-            base_snapshot_report=base_snapshot_report,
             workday_request=workday_request,
             page=page,
             per_page=per_page,
@@ -275,7 +271,6 @@ class Ethnicities(KnoeticWorkdayStream):
         url: str,
         username: str,
         password: str,
-        base_snapshot_report: str,
         workday_request: WorkdayRequest,
         page: int = 1,
         per_page: int = 200,
@@ -286,7 +281,6 @@ class Ethnicities(KnoeticWorkdayStream):
             url=url,
             username=username,
             password=password,
-            base_snapshot_report=base_snapshot_report,
             workday_request=workday_request,
             page=page,
             per_page=per_page,
@@ -338,7 +332,6 @@ class GenderIdentities(KnoeticWorkdayStream):
         url: str,
         username: str,
         password: str,
-        base_snapshot_report: str,
         workday_request: WorkdayRequest,
         page: int = 1,
         per_page: int = 200,
@@ -349,7 +342,6 @@ class GenderIdentities(KnoeticWorkdayStream):
             url=url,
             username=username,
             password=password,
-            base_snapshot_report=base_snapshot_report,
             workday_request=workday_request,
             page=page,
             per_page=per_page,
@@ -401,7 +393,6 @@ class Locations(KnoeticWorkdayStream):
         url: str,
         username: str,
         password: str,
-        base_snapshot_report: str,
         workday_request: WorkdayRequest,
         page: int = 1,
         per_page: int = 200,
@@ -412,7 +403,6 @@ class Locations(KnoeticWorkdayStream):
             url=url,
             username=username,
             password=password,
-            base_snapshot_report=base_snapshot_report,
             workday_request=workday_request,
             page=page,
             per_page=per_page,
@@ -464,7 +454,6 @@ class JobProfiles(KnoeticWorkdayStream):
         url: str,
         username: str,
         password: str,
-        base_snapshot_report: str,
         workday_request: WorkdayRequest,
         page: int = 1,
         per_page: int = 200,
@@ -475,7 +464,6 @@ class JobProfiles(KnoeticWorkdayStream):
             url=url,
             username=username,
             password=password,
-            base_snapshot_report=base_snapshot_report,
             workday_request=workday_request,
             page=page,
             per_page=per_page,
@@ -526,7 +514,6 @@ class Positions(KnoeticWorkdayStream):
         url: str,
         username: str,
         password: str,
-        base_snapshot_report: str,
         workday_request: WorkdayRequest,
         page: int = 1,
         per_page: int = 200,
@@ -537,7 +524,6 @@ class Positions(KnoeticWorkdayStream):
             url=url,
             username=username,
             password=password,
-            base_snapshot_report=base_snapshot_report,
             workday_request=workday_request,
             page=page,
             per_page=per_page,
@@ -590,7 +576,6 @@ class SexualOrientations(KnoeticWorkdayStream):
         url: str,
         username: str,
         password: str,
-        base_snapshot_report: str,
         workday_request: WorkdayRequest,
         page: int = 1,
         per_page: int = 200,
@@ -601,7 +586,6 @@ class SexualOrientations(KnoeticWorkdayStream):
             url=url,
             username=username,
             password=password,
-            base_snapshot_report=base_snapshot_report,
             workday_request=workday_request,
             page=page,
             per_page=per_page,
@@ -652,7 +636,6 @@ class References(KnoeticWorkdayStream):
         url: str,
         username: str,
         password: str,
-        base_snapshot_report: str,
         workday_request: WorkdayRequest,
         page: int = 1,
         per_page: int = 200,
@@ -663,7 +646,6 @@ class References(KnoeticWorkdayStream):
             url=url,
             username=username,
             password=password,
-            base_snapshot_report=base_snapshot_report,
             workday_request=workday_request,
             page=page,
             per_page=per_page,
@@ -726,7 +708,8 @@ class References(KnoeticWorkdayStream):
         for record in response_json:
             yield record
 
-class BaseSnapshotReport(KnoeticWorkdayStream):
+
+class BaseCustomReport(KnoeticWorkdayStream):
     primary_key = None
 
     def __init__(
@@ -740,24 +723,28 @@ class BaseSnapshotReport(KnoeticWorkdayStream):
         page: int = 1,
         per_page: int = 200,
         api_budget: APIBudget | None = None,
+        base_historical_report_compensation: Optional[str] = None,
+        base_historical_report_job: Optional[str] = None,
     ):
         super().__init__(
             tenant=tenant,
             url=url,
             username=username,
             password=password,
-            base_snapshot_report=base_snapshot_report,
             workday_request=workday_request,
             page=page,
             per_page=per_page,
             api_budget=api_budget,
             web_service="customreport2"
         )
+        self.base_snapshot_report = base_snapshot_report
+        self.base_historical_report_compensation = base_historical_report_compensation
+        self.base_historical_report_job = base_historical_report_job
 
     @property
     def http_method(self) -> str:
         return "GET"
-    
+
     def path(
         self,
         *,
@@ -765,8 +752,11 @@ class BaseSnapshotReport(KnoeticWorkdayStream):
         stream_slice: Mapping[str, Any] | None = None,
         next_page_token: Mapping[str, Any] | None = None
     ) -> str:
-        url_query_char = "&" if "?" in self.base_snapshot_report else "?"
-        return f"customreport2/{self.tenant}/{self.username}/{self.base_snapshot_report}{url_query_char}format=csv"
+        report_name = stream_slice.get("report_name")
+        format_type = stream_slice.get("format_type")
+
+        url_query_char = "&" if "?" in report_name else "?"
+        return f"customreport2/{self.tenant}/{self.username}/{report_name}{url_query_char}format={format_type}"
 
     def request_headers(
         self,
@@ -775,13 +765,27 @@ class BaseSnapshotReport(KnoeticWorkdayStream):
         stream_slice: Mapping[str, Any] | None = None,
         next_page_token: Mapping[str, Any] | None = None,
     ) -> Mapping[str, Any]:
+        format_type = "text/csv"
+        if stream_slice:
+            format_type = "application/xml" if stream_slice.get("format_type") == "xml" else "text/csv"
+        
         token = base64.b64encode(f"{self.username}:{self.password}".encode("utf-8")).decode("utf-8")
         return {
             "Content-Type": "application/json",
-            "Accept": "text/csv",
+            "Accept": format_type,
             "Authorization": f"Basic {token}"
         }
 
+    def stream_slices(self, **kwargs) -> Iterable[Optional[Mapping[str, Any]]]:
+        slices = []
+        if self.base_snapshot_report:
+            slices.append({"report_name": self.base_snapshot_report, "format_type": "csv"})
+        if self.base_historical_report_compensation:
+            slices.append({"report_name": self.base_historical_report_compensation, "format_type": "xml"})
+        if self.base_historical_report_job:
+            slices.append({"report_name": self.base_historical_report_job, "format_type": "xml"})
+        return slices
+    
     def parse_response(
         self,
         response: requests.Response,
@@ -790,10 +794,21 @@ class BaseSnapshotReport(KnoeticWorkdayStream):
         stream_slice: Mapping[str, Any] | None = None,
         next_page_token: Mapping[str, Any] | None = None,
     ) -> Iterable[Mapping[str, Any]]:
-        response_csv = response.content.decode("utf-8")
-        reader = csv.DictReader(response_csv.splitlines())
-        for row in reader:
-            yield row
+        if stream_slice and stream_slice.get("format_type") == "xml":
+            if stream_slice.get("report_name") == self.base_historical_report_compensation:
+                response_json = self.workday_request.parse_response(response, stream_name="base_historical_report_compensation")
+                for record in response_json:
+                    yield record
+            
+            if stream_slice.get("report_name") == self.base_historical_report_job:
+                response_json = self.workday_request.parse_response(response, stream_name="base_historical_report_job")
+                for record in response_json:
+                    yield record
+        
+        else:
+            response_json = self.workday_request.parse_response(response, stream_name="base_snapshot_report")
+            for record in response_json:
+                yield record
 
 
 # TODO (pebabion): Implement incremental streams
@@ -866,8 +881,6 @@ class SourceKnoeticWorkday(AbstractSource):
 
     def streams(self, config: Mapping[str, Any]) -> List[Stream]:
         """
-        TODO: Replace the streams below with your own streams.
-
         :param config: A Mapping of the user input configuration as defined in the connector spec.
         """
 
@@ -880,7 +893,9 @@ class SourceKnoeticWorkday(AbstractSource):
 
         username = config["username"]
         password = config["password"]
-        base_snapshot_report = config["base_snapshot_report"]
+        base_snapshot_report = config.get("base_snapshot_report")
+        base_historical_report_compensation = config.get("base_historical_report_compensation")
+        base_historical_report_job = config.get("base_historical_report_job")
         per_page = config.get("per_page", 200)
 
         return [
@@ -889,7 +904,6 @@ class SourceKnoeticWorkday(AbstractSource):
                 url=url,
                 username=username,
                 password=password,
-                base_snapshot_report=base_snapshot_report,
                 per_page=per_page,
                 workday_request=WorkdayRequest(),
             ),
@@ -898,7 +912,6 @@ class SourceKnoeticWorkday(AbstractSource):
                 url=url,
                 username=username,
                 password=password,
-                base_snapshot_report=base_snapshot_report,
                 per_page=per_page,
                 workday_request=WorkdayRequest(),
             ),
@@ -907,7 +920,6 @@ class SourceKnoeticWorkday(AbstractSource):
                 url=url,
                 username=username,
                 password=password,
-                base_snapshot_report=base_snapshot_report,
                 per_page=per_page,
                 workday_request=WorkdayRequest(),
             ),
@@ -916,7 +928,6 @@ class SourceKnoeticWorkday(AbstractSource):
                 url=url,
                 username=username,
                 password=password,
-                base_snapshot_report=base_snapshot_report,
                 per_page=per_page,
                 workday_request=WorkdayRequest(),
             ),
@@ -925,7 +936,6 @@ class SourceKnoeticWorkday(AbstractSource):
                 url=url,
                 username=username,
                 password=password,
-                base_snapshot_report=base_snapshot_report,
                 per_page=per_page,
                 workday_request=WorkdayRequest(),
             ),
@@ -934,7 +944,6 @@ class SourceKnoeticWorkday(AbstractSource):
                 url=url,
                 username=username,
                 password=password,
-                base_snapshot_report=base_snapshot_report,
                 per_page=per_page,
                 workday_request=WorkdayRequest(),
             ),
@@ -943,7 +952,6 @@ class SourceKnoeticWorkday(AbstractSource):
                 url=url,
                 username=username,
                 password=password,
-                base_snapshot_report=base_snapshot_report,
                 per_page=per_page,
                 workday_request=WorkdayRequest(),
             ),
@@ -952,7 +960,6 @@ class SourceKnoeticWorkday(AbstractSource):
                 url=url,
                 username=username,
                 password=password,
-                base_snapshot_report=base_snapshot_report,
                 per_page=per_page,
                 workday_request=WorkdayRequest(),
             ),
@@ -961,17 +968,18 @@ class SourceKnoeticWorkday(AbstractSource):
                 url=url,
                 username=username,
                 password=password,
-                base_snapshot_report=base_snapshot_report,
                 per_page=per_page,
                 workday_request=WorkdayRequest(),
             ),
-            BaseSnapshotReport(
+            BaseCustomReport(
                 tenant=tenant,
                 url=url,
                 username=username,
                 password=password,
                 base_snapshot_report=base_snapshot_report,
+                base_historical_report_compensation=base_historical_report_compensation,
+                base_historical_report_job=base_historical_report_job,
                 per_page=per_page,
                 workday_request=WorkdayRequest(),
-            )
+            ),
         ]
