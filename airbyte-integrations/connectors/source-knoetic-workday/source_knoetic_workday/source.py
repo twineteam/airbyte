@@ -3,6 +3,8 @@ from abc import ABC
 from datetime import datetime
 from typing import Any, Iterable, List, Mapping, MutableMapping, Optional, Tuple
 
+import base64
+import csv
 import requests
 from airbyte_cdk.sources import AbstractSource
 from airbyte_cdk.sources.streams import Stream
@@ -21,8 +23,9 @@ class KnoeticWorkdayStream(HttpStream, ABC):
     """
     Each stream should extend this class (or another abstract subclass of it) to specify behavior unique to that stream.
 
-    Typically for REST APIs each stream corresponds to a resource in the API. For example if the API
-    contains the endpoints
+    Typically for REST APIs each stream corresponds to a resource in the API. For example: 
+    
+    if the API contains the endpoints
         - POST Human_Resources/37.2
 
     then you should have these classes:
@@ -40,6 +43,18 @@ class KnoeticWorkdayStream(HttpStream, ABC):
 
     then you should have these classes:
     - `class Positions(KnoeticWorkdayStream)` contains behavior to pull data for positions using `Staffing/37.2`
+
+    if the API contains the endpoints
+        - POST Integrations/37.2
+
+    then you should have these classes:
+    - `class References(KnoeticWorkdayStream)` contains behavior to pull data for reference types using `Integrations/37.2`
+
+    if the API contains the endpoints
+        - GET customreport2
+    
+    then you should have these classes:
+    - `class BaseSnapshotReport(KnoeticWorkdayStream)` contains behavior to pull data for a base snapshot report using `customreport2`
 
     If some streams implement incremental sync, it is typical to create another class
     `class IncrementalKnoeticWorkdayStream((KnoeticWorkdayStream), ABC)` then have concrete stream
@@ -711,6 +726,75 @@ class References(KnoeticWorkdayStream):
         for record in response_json:
             yield record
 
+class BaseSnapshotReport(KnoeticWorkdayStream):
+    primary_key = None
+
+    def __init__(
+        self,
+        tenant: str,
+        url: str,
+        username: str,
+        password: str,
+        base_snapshot_report: str,
+        workday_request: WorkdayRequest,
+        page: int = 1,
+        per_page: int = 200,
+        api_budget: APIBudget | None = None,
+    ):
+        super().__init__(
+            tenant=tenant,
+            url=url,
+            username=username,
+            password=password,
+            base_snapshot_report=base_snapshot_report,
+            workday_request=workday_request,
+            page=page,
+            per_page=per_page,
+            api_budget=api_budget,
+            web_service="customreport2"
+        )
+
+    @property
+    def http_method(self) -> str:
+        return "GET"
+    
+    def path(
+        self,
+        *,
+        stream_state: Mapping[str, Any] | None = None,
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None
+    ) -> str:
+        url_query_char = "&" if "?" in self.base_snapshot_report else "?"
+        return f"customreport2/{self.tenant}/{self.username}/{self.base_snapshot_report}{url_query_char}format=csv"
+
+    def request_headers(
+        self,
+        *,
+        stream_state: Mapping[str, Any] | None = None,
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None,
+    ) -> Mapping[str, Any]:
+        token = base64.b64encode(f"{self.username}:{self.password}".encode("utf-8")).decode("utf-8")
+        return {
+            "Content-Type": "application/json",
+            "Accept": "text/csv",
+            "Authorization": f"Basic {token}"
+        }
+
+    def parse_response(
+        self,
+        response: requests.Response,
+        *,
+        stream_state: Mapping[str, Any],
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None,
+    ) -> Iterable[Mapping[str, Any]]:
+        response_csv = response.content.decode("utf-8")
+        reader = csv.DictReader(response_csv.splitlines())
+        for row in reader:
+            yield row
+
 
 # TODO (pebabion): Implement incremental streams
 class IncrementalKnoeticWorkdayStream(KnoeticWorkdayStream, ABC):
@@ -873,6 +957,15 @@ class SourceKnoeticWorkday(AbstractSource):
                 workday_request=WorkdayRequest(),
             ),
             References(
+                tenant=tenant,
+                url=url,
+                username=username,
+                password=password,
+                base_snapshot_report=base_snapshot_report,
+                per_page=per_page,
+                workday_request=WorkdayRequest(),
+            ),
+            BaseSnapshotReport(
                 tenant=tenant,
                 url=url,
                 username=username,
