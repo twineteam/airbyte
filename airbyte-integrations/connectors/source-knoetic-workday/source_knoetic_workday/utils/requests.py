@@ -1036,6 +1036,167 @@ class WorkdayRequest:
         self,
         response: requests.Response
     ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
-        # TODO - @erbzz to implement this
+        xml_data = response.text
+        root = ET.fromstring(xml_data)
 
-        return []
+        namespaces = self.get_namespaces(root)
+        namespace_tag = namespaces["wd"]
+
+        # TODO: Hardcoded for now because only 1 client is using this. Need to make it dynamic in the future
+        main_job_tag = "Job_History_from_Previous_System_group"
+        sub_job_tag = "History_Record"
+
+        job_records: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+
+
+        def get_all_positions_group_data(all_positions_group_elem: ET.Element) -> Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]:
+            position_elem = all_positions_group_elem.find(f"{{{namespace_tag}}}Position", namespaces)
+            position_worker_type_elem = all_positions_group_elem.find(f"{{{namespace_tag}}}Position_Worker_Type", namespaces)
+            time_type_elem = all_positions_group_elem.find(f"{{{namespace_tag}}}Time_Type", namespaces)
+            position_manager_elem = all_positions_group_elem.find(f"{{{namespace_tag}}}Position_Manager", namespaces)
+
+            all_positions_group_data = {
+                "Business_Title": self.safe_find_text(all_positions_group_elem, f"{{{namespace_tag}}}Business_Title", namespaces)
+            }
+
+            if position_elem is not None:
+                all_positions_group_data["Position"] = {
+                    "-Descriptor": position_elem.attrib.get(f"{{{namespace_tag}}}Descriptor"),
+                    "ID": {
+                        "#content": self.safe_find_text(position_elem, f"{{{namespace_tag}}}ID", namespaces),
+                        "-type": position_elem.find(f"{{{namespace_tag}}}ID").attrib.get(f"{{{namespace_tag}}}type")
+                    }
+                }
+            
+            if position_worker_type_elem is not None:
+                all_positions_group_data["Position_Worker_Type"] = {
+                    "-Descriptor": position_worker_type_elem.attrib.get(f"{{{namespace_tag}}}Descriptor"),
+                    "ID": [
+                        {
+                            "#content": id_elem.text,
+                            "-type": id_elem.attrib.get(f"{{{namespace_tag}}}type")
+                        }
+                        for id_elem in position_worker_type_elem.findall(f"{{{namespace_tag}}}ID", namespaces)
+                    ]
+                }
+            
+            if time_type_elem is not None:
+                all_positions_group_data["Time_Type"] = {
+                    "-Descriptor": time_type_elem.attrib.get(f"{{{namespace_tag}}}Descriptor"),
+                    "ID": [
+                        {
+                            "#content": id_elem.text,
+                            "-type": id_elem.attrib.get(f"{{{namespace_tag}}}type")
+                        }
+                        for id_elem in time_type_elem.findall(f"{{{namespace_tag}}}ID", namespaces)
+                    ]
+                }
+            
+            if position_manager_elem is not None:
+                all_positions_group_data["Position_Manager"] = {
+                    "-Descriptor": position_manager_elem.attrib.get(f"{{{namespace_tag}}}Descriptor"),
+                    "ID": [
+                        {
+                            "#content": id_elem.text,
+                            "-type": id_elem.attrib.get(f"{{{namespace_tag}}}type")
+                        }
+                        for id_elem in position_manager_elem.findall(f"{{{namespace_tag}}}ID", namespaces)
+                    ]
+                }
+            
+            return all_positions_group_data
+
+
+        for report_entry in root.findall(f".//{{{namespace_tag}}}Report_Entry", namespaces):
+            all_positions_group_elems = report_entry.findall(f"{{{namespace_tag}}}All_Positions_group", namespaces)
+            
+            if len(all_positions_group_elems) > 1:
+                all_positions_group_data = []
+                for all_positions_group_elem in all_positions_group_elems:
+                    all_positions_group_data.append(get_all_positions_group_data(all_positions_group_elem))
+            
+            elif len(all_positions_group_elems) == 1:
+                all_positions_group_data = get_all_positions_group_data(all_positions_group_elems[0])
+            
+            else:
+                all_positions_group_data = None
+
+
+            employee_id = self.safe_find_text(report_entry, f"{{{namespace_tag}}}Employee_ID", namespaces)
+            hire_date = self.safe_find_text(report_entry, f"{{{namespace_tag}}}Hire_Date", namespaces)
+            original_hire_date = self.safe_find_text(report_entry, f"{{{namespace_tag}}}Original_Hire_Date", namespaces)
+            termination_reason = self.safe_find_text(report_entry, f"{{{namespace_tag}}}Termination_Reason", namespaces)
+            termination_date = self.safe_find_text(report_entry, f"{{{namespace_tag}}}termination_date", namespaces)
+            termination_regret = self.safe_find_text(report_entry, f"{{{namespace_tag}}}termination_regret", namespaces)
+            termination_category_elem = report_entry.find(f"{{{namespace_tag}}}Termination_Category", namespaces)
+            termination_category = {
+                "-Descriptor": termination_category_elem.attrib.get(f"{{{namespace_tag}}}Descriptor"),
+                "ID": [
+                    {
+                        "#content": id_elem.text,
+                        "-type": id_elem.attrib.get(f"{{{namespace_tag}}}type")
+                    }
+                    for id_elem in termination_category_elem.findall(f"{{{namespace_tag}}}ID", namespaces)
+                ]
+            } if termination_category_elem is not None else None
+
+            worker_elem = report_entry.find(f"{{{namespace_tag}}}Worker", namespaces)
+            worker = {
+                "-Descriptor": worker_elem.attrib.get(f"{{{namespace_tag}}}Descriptor"),
+                "ID": [
+                    {
+                        "#content": id_elem.text,
+                        "-type": id_elem.attrib.get(f"{{{namespace_tag}}}type")
+                    }
+                    for id_elem in worker_elem.findall(f"{{{namespace_tag}}}ID", namespaces)
+                ]
+            } if worker_elem is not None else None
+
+            job_history = []
+            for history_elem in report_entry.findall(f"{{{namespace_tag}}}{main_job_tag}", namespaces):
+                job_history_entry_elem = history_elem.find(f"{{{namespace_tag}}}{sub_job_tag}", namespaces)
+
+                job_history_item = {
+                    "Compensation": self.safe_find_text(history_elem, f"{{{namespace_tag}}}Compensation", namespaces),
+                    "Department": self.safe_find_text(history_elem, f"{{{namespace_tag}}}Department", namespaces),
+                    "Effective_Date": self.safe_find_text(history_elem, f"{{{namespace_tag}}}Effective_Date", namespaces),
+                    "Function": self.safe_find_text(history_elem, f"{{{namespace_tag}}}Function", namespaces),
+                    "Hourly_Salaried": self.safe_find_text(history_elem, f"{{{namespace_tag}}}Hourly_Salaried", namespaces),
+                    "Job_Title": self.safe_find_text(history_elem, f"{{{namespace_tag}}}Job_Title", namespaces),
+                    "Location": self.safe_find_text(history_elem, f"{{{namespace_tag}}}Location", namespaces),
+                    "Manager": self.safe_find_text(history_elem, f"{{{namespace_tag}}}Manager", namespaces),
+                    "Reason": self.safe_find_text(history_elem, f"{{{namespace_tag}}}Reason", namespaces),
+                    "Salary_Grade": self.safe_find_text(history_elem, f"{{{namespace_tag}}}Salary_Grade", namespaces),
+                    "Worker_History_Name": self.safe_find_text(history_elem, f"{{{namespace_tag}}}Worker_History_Name", namespaces)
+                }
+
+                if job_history_entry_elem is not None:
+                    job_history_item[sub_job_tag] = {
+                        "-Descriptor": job_history_entry_elem.attrib.get(f"{{{namespace_tag}}}Descriptor"),
+                        "ID": [
+                            {
+                                "#content": id_elem.text,
+                                "-type": id_elem.attrib.get(f"{{{namespace_tag}}}type")
+                            }
+                            for id_elem in job_history_entry_elem.findall(f"{{{namespace_tag}}}ID", namespaces)
+                        ]
+                    }
+
+                job_history.append(job_history_item)
+            
+            record = {
+                "Employee_ID": employee_id,
+                "All_Positions_group": all_positions_group_data,
+                "Hire_Date": hire_date,
+                "Original_Hire_Date": original_hire_date,
+                "Termination_Reason": termination_reason,
+                "termination_date": termination_date,
+                "termination_regret": termination_regret,
+                "Termination_Category": termination_category,
+                "Worker": worker,
+                main_job_tag: job_history
+            }
+
+            job_records.append(record)
+
+        return job_records
