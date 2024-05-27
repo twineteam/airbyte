@@ -1,9 +1,10 @@
+import base64
 import logging
+import time
 from abc import ABC
 from datetime import datetime
 from typing import Any, Iterable, List, Mapping, MutableMapping, Optional, Tuple
 
-import base64
 import requests
 from airbyte_cdk.sources import AbstractSource
 from airbyte_cdk.sources.streams import Stream
@@ -22,8 +23,8 @@ class KnoeticWorkdayStream(HttpStream, ABC):
     """
     Each stream should extend this class (or another abstract subclass of it) to specify behavior unique to that stream.
 
-    Typically for REST APIs each stream corresponds to a resource in the API. For example: 
-    
+    Typically for REST APIs each stream corresponds to a resource in the API. For example:
+
     if the API contains the endpoints
         - POST Human_Resources/37.2
 
@@ -51,7 +52,7 @@ class KnoeticWorkdayStream(HttpStream, ABC):
 
     if the API contains the endpoints
         - GET customreport2
-    
+
     then you should have these classes:
     - `class BaseCustomReport(KnoeticWorkdayStream)` contains behavior to pull data for:
         - a base snapshot report using `customreport2`
@@ -107,21 +108,39 @@ class KnoeticWorkdayStream(HttpStream, ABC):
 
     def next_page_token(self, response: requests.Response) -> Optional[Mapping[str, Any]]:
         """
-        This method should return a Mapping (e.g: dict) containing whatever information required to
-        make paginated requests. This dict is passed to most other methods in this class to help you
-        form headers, request bodies, query params, etc..
-
-        For example, if the API accepts a 'page' parameter to determine which page of the result to
-        return, and a response from the API contains a 'page' number, then this method should probably
-        return a dict {'page': response.json()['page'] + 1} to increment the page count by 1.
-        The request_params method should then read the input next_page_token and set the
-        'page' param to next_page_token['page'].
-
         :param response: the most recent response from the API
         :return If there is another page in the result, a mapping (e.g: dict) containing information
         needed to query the next page in the response. If there are no more pages in the result, return None.
         """
-        return None
+
+        response_text = response.text
+
+        import xml.etree.ElementTree as ET
+
+        root = ET.fromstring(response_text)
+        ns = {"wd": "urn:com.workday/bsvc"}
+
+        # Find the current page and total pages
+        current_page_elem = root.find(".//wd:Page", ns)
+        total_pages_elem = root.find(".//wd:Total_Pages", ns)
+
+        if (
+            current_page_elem is not None
+            and current_page_elem.text is not None
+            and total_pages_elem is not None
+            and total_pages_elem.text is not None
+        ):
+            current_page = int(current_page_elem.text)
+            total_pages = int(total_pages_elem.text)
+
+            # Calculate the next page number if available
+            if current_page < total_pages:
+                next_page = current_page + 1
+                return {"page": next_page}
+            else:
+                return None
+        else:
+            raise ValueError("Required XML elements not found")
 
     def path(
         self,
@@ -172,6 +191,9 @@ class Workers(KnoeticWorkdayStream):
         """
         Override to define the request body data for the request.
         """
+
+        if next_page_token:
+            self.page = next_page_token["page"]
 
         return self.workday_request.construct_request_body(
             "workers.xml",
@@ -500,6 +522,7 @@ class JobProfiles(KnoeticWorkdayStream):
         response_json = self.workday_request.parse_response(response, stream_name="job_profiles")
         return response_json
 
+
 class Positions(KnoeticWorkdayStream):
     """
     Represents a collection of streams of `positions` data from the Knoetic Workday source.
@@ -528,7 +551,7 @@ class Positions(KnoeticWorkdayStream):
             page=page,
             per_page=per_page,
             api_budget=api_budget,
-            web_service="Staffing"
+            web_service="Staffing",
         )
 
     def request_body_data(
@@ -589,7 +612,7 @@ class SexualOrientations(KnoeticWorkdayStream):
             workday_request=workday_request,
             page=page,
             per_page=per_page,
-            api_budget=api_budget
+            api_budget=api_budget,
         )
 
     def request_body_data(
@@ -622,6 +645,7 @@ class SexualOrientations(KnoeticWorkdayStream):
         response_json = self.workday_request.parse_response(response, stream_name="sexual_orientations")
         return response_json
 
+
 class References(KnoeticWorkdayStream):
     """
     Represents a collection of streams of `references` data from the Knoetic Workday source.
@@ -650,7 +674,7 @@ class References(KnoeticWorkdayStream):
             page=page,
             per_page=per_page,
             api_budget=api_budget,
-            web_service="Integrations"
+            web_service="Integrations",
         )
         self.reference_types = [
             "Contingent_Worker_Type_ID",
@@ -664,7 +688,7 @@ class References(KnoeticWorkdayStream):
             "Management_Level_ID",
             "Marital_Status_ID",
             "Organization_Subtype_ID",
-            "Organization_Type_ID"
+            "Organization_Type_ID",
         ]
         self.current_reference_type = None
 
@@ -680,14 +704,9 @@ class References(KnoeticWorkdayStream):
         # Stream slice per reference type
         if stream_slice:
             self.current_reference_type = stream_slice["reference_type"]
-        
+
         return self.workday_request.construct_request_body(
-            "references.xml",
-            self.tenant,
-            self.username,
-            self.password,
-            self.page,
-            self.per_page
+            "references.xml", self.tenant, self.username, self.password, self.page, self.per_page
         ).replace("REFERENCE_SUBCATEGORY_TYPE", self.current_reference_type)
 
     def stream_slices(self, **kwargs) -> Iterable[Optional[Mapping[str, Any]]]:
@@ -735,7 +754,7 @@ class BaseCustomReport(KnoeticWorkdayStream):
             page=page,
             per_page=per_page,
             api_budget=api_budget,
-            web_service="customreport2"
+            web_service="customreport2",
         )
         self.base_snapshot_report = base_snapshot_report
         self.base_historical_report_compensation = base_historical_report_compensation
@@ -750,7 +769,7 @@ class BaseCustomReport(KnoeticWorkdayStream):
         *,
         stream_state: Mapping[str, Any] | None = None,
         stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None
+        next_page_token: Mapping[str, Any] | None = None,
     ) -> str:
         report_name = stream_slice.get("report_name")
         format_type = stream_slice.get("format_type")
@@ -768,13 +787,9 @@ class BaseCustomReport(KnoeticWorkdayStream):
         format_type = "text/csv"
         if stream_slice:
             format_type = "application/xml" if stream_slice.get("format_type") == "xml" else "text/csv"
-        
+
         token = base64.b64encode(f"{self.username}:{self.password}".encode("utf-8")).decode("utf-8")
-        return {
-            "Content-Type": "application/json",
-            "Accept": format_type,
-            "Authorization": f"Basic {token}"
-        }
+        return {"Content-Type": "application/json", "Accept": format_type, "Authorization": f"Basic {token}"}
 
     def stream_slices(self, **kwargs) -> Iterable[Optional[Mapping[str, Any]]]:
         slices = []
@@ -785,7 +800,7 @@ class BaseCustomReport(KnoeticWorkdayStream):
         if self.base_historical_report_job:
             slices.append({"report_name": self.base_historical_report_job, "format_type": "xml"})
         return slices
-    
+
     def parse_response(
         self,
         response: requests.Response,
@@ -796,15 +811,17 @@ class BaseCustomReport(KnoeticWorkdayStream):
     ) -> Iterable[Mapping[str, Any]]:
         if stream_slice and stream_slice.get("format_type") == "xml":
             if stream_slice.get("report_name") == self.base_historical_report_compensation:
-                response_json = self.workday_request.parse_response(response, stream_name="base_historical_report_compensation")
+                response_json = self.workday_request.parse_response(
+                    response, stream_name="base_historical_report_compensation"
+                )
                 for record in response_json:
                     yield record
-            
+
             if stream_slice.get("report_name") == self.base_historical_report_job:
                 response_json = self.workday_request.parse_response(response, stream_name="base_historical_report_job")
                 for record in response_json:
                     yield record
-        
+
         else:
             response_json = self.workday_request.parse_response(response, stream_name="base_snapshot_report")
             for record in response_json:
