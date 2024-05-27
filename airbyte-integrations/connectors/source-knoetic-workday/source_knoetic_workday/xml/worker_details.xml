@@ -1,6 +1,7 @@
 <wd:Get_Workers_Request xmlns:wd="urn:com.workday/bsvc" wd:version="v37.2">
     <!-- Optional: -->
-    <wd:Request_References wd:Skip_Non_Existing_Instances="false" wd:Ignore_Invalid_References="true">
+    <wd:Request_References wd:Skip_Non_Existing_Instances="false"
+        wd:Ignore_Invalid_References="true">
         <!-- 1 or more repetitions: -->
         <wd:Worker_Reference>
             <!-- Zero or more repetitions: -->
@@ -23,7 +24,7 @@
     <!-- Optional: -->
     <wd:Response_Filter>
         <!-- Optional: -->
-        <wd:As_Of_Effective_Date>9999-12-31</wd:As_Of_Effective_Date> 
+        <wd:As_Of_Effective_Date>9999-12-31</wd:As_Of_Effective_Date>
         <!-- Optional: -->
         <wd:Page>1</wd:Page>
         <!-- Optional: -->
