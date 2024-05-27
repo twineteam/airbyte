@@ -133,7 +133,6 @@ class KnoeticWorkdayStream(HttpStream, ABC):
             current_page = int(current_page_elem.text)
             total_pages = int(total_pages_elem.text)
 
-            # Calculate the next page number if available
             if current_page < total_pages:
                 next_page = current_page + 1
                 return {"page": next_page}
