@@ -20,6 +20,10 @@ class WorkdayRequest:
                 "request_file": "workers.xml",
                 "parse_response": self.parse_workers_response,
             },
+            "worker_profile": {
+                "request_file": "worker_profile.xml",
+                "parse_response": self.parse_worker_profiles_response,
+            },
             "organization_hierarchies": {
                 "request_file": "organization_hierarchies.xml",
                 "parse_response": self.parse_organization_hierarchies_response,
@@ -63,29 +67,46 @@ class WorkdayRequest:
             },
         }
 
+    xmlns = r"{urn:com.workday/bsvc}"
+
     def read_xml_file(self, filename: str) -> str:
         with open(os.path.join(self.base_path, filename), "r") as file:
             return file.read()
 
-    def get_namespaces(self, element: ET.Element) -> Dict[str, str]:
+    @staticmethod
+    def get_namespaces(element: ET.Element) -> Dict[str, str]:
         """
         Extracts namespaces from the XML element.
         """
         namespaces = {}
         for ns in element.iter():
             if ns.tag.startswith("{"):
-                uri, tag = ns.tag[1:].split("}")
+                uri, _ = ns.tag[1:].split("}")
                 namespaces[uri] = uri
         return {"wd": list(namespaces.keys())[0]}
 
-    def safe_find_text(self, element: ET.Element, tag: str, namespaces: Dict[str, str]) -> Optional[str]:
+    @staticmethod
+    def safe_find_text(element: ET.Element | None, tag: str, namespaces: Dict[str, str]) -> str | None:
         """
-        Safely find the text of a tag in an element.
+        Safely finds and returns the text content of an XML element.
+
+        Args:
+            element (ET.Element | None): The XML element to search within.
+            tag (str): The tag name of the element to find.
+            namespaces (Dict[str, str]): A dictionary of XML namespace prefixes and URIs.
+
+        Returns:
+            str | None: The text content of the found element, or None if the element or tag is not found.
+
         """
-        if element is None or element.find(tag, namespaces) is None:
+        if element is None:
             return None
 
-        return element.find(tag, namespaces).text
+        found_element = element.find(tag, namespaces)
+        if found_element is None:
+            return None
+
+        return found_element.text
 
     def construct_request_body(
         self, file_name: str, tenant: str, username: str, password: str, page: int, per_page: int = 200
@@ -120,16 +141,15 @@ class WorkdayRequest:
             custom_parse_response_function = self.stream_mappings[stream_name].get("parse_response")
             return custom_parse_response_function(response)
 
-    @staticmethod
     def parse_workers_response(
         self, response_data: ET.Element, namespaces: Dict[str, str]
     ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
 
         workers = []
 
-        for worker in response_data.findall("{urn:com.workday/bsvc}Worker", namespaces):
-            worker_descriptor_elem = worker.find("{urn:com.workday/bsvc}Worker_Descriptor", namespaces)
-            worker_descriptor: str | None = worker_descriptor_elem.text if worker_descriptor_elem is not None else None
+        for worker in response_data.findall(f"{self.xmlns}Worker", namespaces):
+            worker_descriptor_elem = worker.find(f"{self.xmlns}Worker_Descriptor", namespaces)
+            worker_descriptor = worker_descriptor_elem.text if worker_descriptor_elem is not None else None
 
             worker_data: Dict[str, str | List[Dict[str, str]] | None] = {
                 "Worker_Descriptor": worker_descriptor,
@@ -151,14 +171,14 @@ class WorkdayRequest:
 
         return workers
 
+    def parse_worker_profiles_response(self, response_data: requests.Response):
+        print("response_data", response_data.text)
+
     def parse_organization_hierarchies_response(
         self, response_data: ET.Element, namespaces: Dict[str, str]
     ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
 
         organization_hierarchies: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
-
-        if response_data is None:
-            return organization_hierarchies
 
         for org in response_data.findall("{urn:com.workday/bsvc}Organization", namespaces):
             org_reference_elem = org.find("{urn:com.workday/bsvc}Organization_Reference", namespaces)
