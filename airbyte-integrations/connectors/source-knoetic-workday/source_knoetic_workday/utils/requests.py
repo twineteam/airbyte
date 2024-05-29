@@ -1,9 +1,11 @@
+import base64
 import csv
 import os
+import requests
 import xml.etree.ElementTree as ET
+
 from typing import Callable, Dict, List, Optional, Union
 
-import requests
 
 CURRENT_DIR: str = os.path.dirname(os.path.realpath(__file__))
 XML_DIR: str = CURRENT_DIR.replace("utils", "xml")
@@ -23,6 +25,10 @@ class WorkdayRequest:
             "worker_profile": {
                 "request_file": "worker_profile.xml",
                 "parse_response": self.parse_worker_profile_response,
+            },
+            "worker_details_photo": {
+                "request_file": "worker_details_photo.xml",
+                "parse_response": self.parse_worker_details_photo_response,
             },
             "organization_hierarchies": {
                 "request_file": "organization_hierarchies.xml",
@@ -567,6 +573,66 @@ class WorkdayRequest:
         profile_data["Worker_Profile_Data"] = worker_profile_data
         return [profile_data]
 
+
+    def parse_worker_details_photo_response(self, response_data: ET.Element, namespaces: Dict[str, str]) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+        worker_details_photo: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+
+        worker_elem = response_data.find("{urn:com.workday/bsvc}Worker", namespaces)
+
+        if worker_elem is None:
+            return worker_details_photo
+        
+        worker_reference_elem = worker_elem.find("{urn:com.workday/bsvc}Worker_Reference", namespaces)
+        worker_reference = {
+            "ID": [
+                {
+                    "#content": id_elem.text if id_elem is not None else "Unknown ID",
+                    "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
+                }
+                for id_elem in worker_reference_elem.findall("{urn:com.workday/bsvc}ID", namespaces)
+            ]
+        }
+
+        worker_data_elem = worker_elem.find("{urn:com.workday/bsvc}Worker_Data", namespaces)
+        if worker_data_elem is None:
+            return worker_details_photo
+
+        photo_data_elem = worker_data_elem.find("{urn:com.workday/bsvc}Photo_Data", namespaces)
+        if photo_data_elem is not None:
+            filename = self.safe_find_text(photo_data_elem, "{urn:com.workday/bsvc}Filename", namespaces)
+            image_base64 = self.safe_find_text(photo_data_elem, "{urn:com.workday/bsvc}Image", namespaces)
+
+            if filename and image_base64:
+                image_data = base64.b64decode(image_base64)
+                # TODO - Save photo to s3
+                filename = None
+                filepath = None
+
+            else:
+                filename = None
+                filepath = None
+        else:
+            filename = None
+            filepath = None
+
+        worker_data = {
+            "Photo_Data": {
+                "Filename": filename,
+                "Image": filepath
+            },
+            "User_ID": self.safe_find_text(worker_data_elem, "{urn:com.workday/bsvc}User_ID", namespaces),
+            "Worker_ID": self.safe_find_text(worker_data_elem, "{urn:com.workday/bsvc}Worker_ID", namespaces),
+        }
+
+        worker_details_photo.append(
+            {
+                "Worker_Reference": worker_reference,
+                "Worker_Data": worker_data,
+                "Worker_Descriptor": self.safe_find_text(worker_elem, "{urn:com.workday/bsvc}Worker_Descriptor", namespaces),
+            }
+        )
+
+        return worker_details_photo
 
 
     def parse_organization_hierarchies_response(

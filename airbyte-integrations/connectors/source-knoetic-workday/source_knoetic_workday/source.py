@@ -278,6 +278,69 @@ class WorkerProfile(KnoeticWorkdayStream):
         return [{"worker_id": worker_id} for worker_id in self.worker_ids]
 
 
+class WorkerDetailsPhoto(KnoeticWorkdayStream):
+    primary_key = None
+
+    def __init__(
+        self,
+        *,
+        tenant: str,
+        url: str,
+        username: str,
+        password: str,
+        workday_request: WorkdayRequest,
+        page: int = 1,
+        per_page: int = 200,
+        worker_ids: List[str],
+    ):
+
+        super().__init__(
+            tenant=tenant,
+            url=url,
+            username=username,
+            password=password,
+            workday_request=workday_request,
+            page=page,
+            per_page=per_page,
+        )
+        self.worker_ids = worker_ids
+        self.current_worker_id = None
+
+    def request_body_data(
+        self,
+        stream_state: Mapping[str, Any] | None,
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None,
+    ) -> Mapping[str, Any] | str | None:
+        if stream_slice:
+            self.current_worker_id = stream_slice["worker_id"]
+        
+        return self.workday_request.construct_request_body(
+            "worker_details_photo.xml",
+            self.tenant,
+            self.username,
+            self.password,
+            self.page,
+            self.per_page,
+        ).replace("PARENT_ID", self.current_worker_id)
+
+    def parse_response(
+        self,
+        response: requests.Response,
+        *,
+        stream_state: Mapping[str, Any],
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None,
+    ) -> Iterable[Mapping[str, Any]]:
+
+        parsed_response = self.workday_request.parse_response(response, stream_name="worker_details_photo")
+        for record in parsed_response:
+            yield record
+    
+    def stream_slices(self, **kwargs) -> Iterable[Optional[Mapping[str, Any]]]:
+        return [{"worker_id": worker_id} for worker_id in self.worker_ids]
+
+
 class OrganizationHierarchies(KnoeticWorkdayStream):
     """
     Represents a collection of streams of `organization hierarchies` data from the Knoetic Workday source.
@@ -1001,9 +1064,20 @@ class SourceKnoeticWorkday(AbstractSource):
             worker_ids=worker_ids,
         )
 
+        worker_details_photo_stream = WorkerDetailsPhoto(
+            tenant=tenant,
+            url=url,
+            username=username,
+            password=password,
+            per_page=per_page,
+            workday_request=WorkdayRequest(),
+            worker_ids=worker_ids,
+        )
+
         return [
             workers_stream,
             worker_profile_stream,
+            worker_details_photo_stream,
             OrganizationHierarchies(
                 tenant=tenant,
                 url=url,
