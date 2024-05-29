@@ -22,7 +22,7 @@ class WorkdayRequest:
             },
             "worker_profile": {
                 "request_file": "worker_profile.xml",
-                "parse_response": self.parse_worker_profiles_response,
+                "parse_response": self.parse_worker_profile_response,
             },
             "organization_hierarchies": {
                 "request_file": "organization_hierarchies.xml",
@@ -70,13 +70,28 @@ class WorkdayRequest:
     xmlns = r"{urn:com.workday/bsvc}"
 
     def read_xml_file(self, filename: str) -> str:
+        """
+        Reads the contents of an XML file.
+
+        Args:
+            filename (str): The name of the file to read.
+            
+        Returns:
+            str: The contents of the file.
+        """
         with open(os.path.join(self.base_path, filename), "r") as file:
             return file.read()
 
     @staticmethod
     def get_namespaces(element: ET.Element) -> Dict[str, str]:
         """
-        Extracts namespaces from the XML element.
+        Extracts the namespaces from an XML element.
+
+        Args:
+            element (ET.Element): The XML element to extract namespaces from.
+
+        Returns:
+            Dict[str, str]: A dictionary of namespace prefixes and URIs.
         """
         namespaces = {}
         for ns in element.iter():
@@ -107,7 +122,25 @@ class WorkdayRequest:
             return None
 
         return found_element.text
+    
+    @staticmethod
+    def safe_get_attrib(element: ET.Element | None, attrib: str) -> str | None:
+        """
+        Safely finds and returns the value of an XML element attribute.
 
+        Args:
+            element (ET.Element | None): The XML element to search within.
+            attrib (str): The attribute name to find.
+
+        Returns:
+            str | None: The value of the found attribute, or None if the element or attribute is not found.
+
+        """
+        if element is None:
+            return None
+
+        return element.attrib.get(attrib)
+    
     def construct_request_body(
         self, file_name: str, tenant: str, username: str, password: str, page: int, per_page: int = 200
     ) -> str:
@@ -125,6 +158,8 @@ class WorkdayRequest:
     def parse_response(self, response: requests.Response, stream_name) -> list:
         if response.status_code != 200:
             raise requests.exceptions.HTTPError(f"Request failed with status code {response.status_code}.")
+        
+        custom_parse_response_function = self.stream_mappings[stream_name].get("parse_response")
 
         try:
             xml_data = response.text
@@ -134,11 +169,12 @@ class WorkdayRequest:
 
             response_data = root.find(".//{urn:com.workday/bsvc}Response_Data", namespaces)
 
-            custom_parse_response_function = self.stream_mappings[stream_name].get("parse_response")
+            if response_data is None:
+                return custom_parse_response_function(response)
+
             return custom_parse_response_function(response_data, namespaces)
 
-        except:
-            custom_parse_response_function = self.stream_mappings[stream_name].get("parse_response")
+        except Exception as e:
             return custom_parse_response_function(response)
 
     def parse_workers_response(
@@ -171,8 +207,362 @@ class WorkdayRequest:
 
         return workers
 
-    def parse_worker_profiles_response(self, response_data: requests.Response):
-        print("response_data", response_data.text)
+    def parse_worker_profile_response(self, response: requests.Response) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+        if response.status_code != 200:
+            raise requests.exceptions.HTTPError(f"Request failed with status code {response.status_code}.")
+
+        xml_data = response.text
+        root = ET.fromstring(xml_data)
+
+        namespaces = {"env": "http://schemas.xmlsoap.org/soap/envelope/", "wd": "urn:com.workday/bsvc"}
+        namespace_tag = f"{{{namespaces['wd']}}}"
+
+        profile = root.find(f".//wd:Worker_Profile", namespaces)
+        if profile is None:
+            return None
+        
+        worker_reference_elem = profile.find(f"{namespace_tag}Worker_Reference", namespaces)
+        employee_reference_elem = worker_reference_elem.find(f"{namespace_tag}Employee_Reference", namespaces)
+        contingent_worker_reference_elem = worker_reference_elem.find(f"{namespace_tag}Contingent_Worker_Reference", namespaces)
+
+        profile_data = {}
+        
+        if employee_reference_elem is not None:
+            profile_data["Worker_Reference"] = {
+                "Employee_Reference": {
+                    "Integration_ID_Reference": {
+                        "-Descriptor": self.safe_get_attrib(employee_reference_elem.find(f"{namespace_tag}Integration_ID_Reference", namespaces), f"{namespace_tag}Descriptor"),
+                        "ID": [
+                            {
+                                "-System_ID": self.safe_get_attrib(id_elem, f"{namespace_tag}System_ID"),
+                                "#content": id_elem.text
+                            }
+                            for id_elem in employee_reference_elem.findall(f"{namespace_tag}Integration_ID_Reference/{namespace_tag}ID", namespaces)
+                        ]
+                    }
+                }
+            }
+        elif contingent_worker_reference_elem is not None:
+            profile_data["Worker_Reference"] = {
+                "Contingent_Worker_Reference": {
+                    "Integration_ID_Reference": {
+                        "-Descriptor": self.safe_get_attrib(contingent_worker_reference_elem.find(f"{namespace_tag}Integration_ID_Reference", namespaces), f"{namespace_tag}Descriptor"),
+                        "ID": [
+                            {
+                                "-System_ID": self.safe_get_attrib(id_elem, f"{namespace_tag}System_ID"),
+                                "#content": id_elem.text
+                            }
+                            for id_elem in contingent_worker_reference_elem.findall(f"{namespace_tag}Integration_ID_Reference/{namespace_tag}ID", namespaces)
+                        ]
+                    }
+                }
+            }
+
+        worker_profile_data_elem = profile.find(f"{namespace_tag}Worker_Profile_Data", namespaces)
+        worker_profile_data = {}
+
+        worker_status_data_elem = worker_profile_data_elem.find(f"{namespace_tag}Worker_Status_Data", namespaces)
+
+        if worker_status_data_elem is not None:
+            worker_status_data = {
+                "Active": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Active", namespaces),
+                "Hire_Date": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Hire_Date", namespaces),
+                "Original_Hire_Date": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Original_Hire_Date", namespaces),
+                "Hire_Reason": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Hire_Reason", namespaces),
+                "Continuous_Service_Date": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Continuous_Service_Date", namespaces),
+                "Retired": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Retired", namespaces),
+                "Seniority_Date": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Seniority_Date", namespaces),
+                "Days_Unemployed": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Days_Unemployed", namespaces),
+                "Months_Continuous_Prior_Employment": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Months_Continuous_Prior_Employment", namespaces),
+                "Probation_Status_Data": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Probation_Status_Data", namespaces),
+            }
+
+            termination_status_data_elem = worker_status_data_elem.find(f"{namespace_tag}Termination_Status_Data", namespaces)
+            termination_status_data = {
+                "Termination_Date": self.safe_find_text(termination_status_data_elem, f"{namespace_tag}Termination_Date", namespaces),
+                "Termination_Reason": self.safe_find_text(termination_status_data_elem, f"{namespace_tag}Termination_Reason", namespaces),
+                "Termination_Category": self.safe_find_text(termination_status_data_elem, f"{namespace_tag}Termination_Category", namespaces),
+                "Involuntary_Termination": self.safe_find_text(termination_status_data_elem, f"{namespace_tag}Involuntary_Termination", namespaces),
+                "Terminated": self.safe_find_text(termination_status_data_elem, f"{namespace_tag}Terminated", namespaces),
+            } if termination_status_data_elem is not None else None
+
+            worker_status_data["Termination_Status_Data"] = termination_status_data
+            worker_profile_data["Worker_Status_Data"] = worker_status_data
+        
+
+        worker_personal_data_elem = worker_profile_data_elem.find(f"{namespace_tag}Worker_Personal_Data", namespaces)
+        if worker_personal_data_elem is not None:
+            biographic_data_elem = worker_personal_data_elem.find(f"{namespace_tag}Biographic_Data", namespaces)
+            contact_data_elem = worker_personal_data_elem.find(f"{namespace_tag}Contact_Data", namespaces)
+            demographic_data_elem = worker_personal_data_elem.find(f"{namespace_tag}Demographic_Data", namespaces)
+            name_data_elem = worker_personal_data_elem.find(f"{namespace_tag}Name_Data", namespaces)
+
+            biographic_data = {
+                "Date_Of_Birth": self.safe_find_text(biographic_data_elem, f"{namespace_tag}Date_Of_Birth", namespaces),
+                "Gender_Reference": {
+                    "Gender_Description": self.safe_find_text(biographic_data_elem, f"{namespace_tag}Gender_Reference/{namespace_tag}Gender_Description", namespaces)
+                },
+                "Uses_Tobacco": self.safe_find_text(biographic_data_elem, f"{namespace_tag}Uses_Tobacco", namespaces),
+            } if biographic_data_elem is not None else None
+
+            contact_data = {
+                "Internet_Email_Address_Data": [
+                    {
+                        "Email_Address": self.safe_find_text(email_data_elem, f"{namespace_tag}Email_Address", namespaces),
+                        "Usage_Data": {
+                            "-Public": self.safe_get_attrib(email_data_elem.find(f"{namespace_tag}Usage_Data", namespaces), f"{namespace_tag}Public"),
+                            "Type_Reference": [
+                                {
+                                    "#content": type_ref.text,
+                                    "-Primary": self.safe_get_attrib(type_ref, f"{namespace_tag}Primary")
+                                }
+                                for type_ref in email_data_elem.findall(f"{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces)
+                            ]
+                        }
+                    }
+                    for email_data_elem in contact_data_elem.findall(f"{namespace_tag}Internet_Email_Address_Data", namespaces)
+                ],
+                "Phone_Number_Data": {
+                    "Country_ISO_Code": self.safe_find_text(contact_data_elem, f"{namespace_tag}Phone_Number_Data/{namespace_tag}Country_ISO_Code", namespaces),
+                    "International_Phone_Code": self.safe_find_text(contact_data_elem, f"{namespace_tag}Phone_Number_Data/{namespace_tag}International_Phone_Code", namespaces),
+                    "Area_Code": self.safe_find_text(contact_data_elem, f"{namespace_tag}Phone_Number_Data/{namespace_tag}Area_Code", namespaces),
+                    "Phone_Number": self.safe_find_text(contact_data_elem, f"{namespace_tag}Phone_Number_Data/{namespace_tag}Phone_Number", namespaces),
+                    "Phone_Device_Type_Reference": {
+                        "Phone_Device_Type_Description": self.safe_find_text(contact_data_elem, f"{namespace_tag}Phone_Number_Data/{namespace_tag}Phone_Device_Type_Reference/{namespace_tag}Phone_Device_Type_Description", namespaces)
+                    },
+                    "Usage_Data": {
+                        "Type_Reference": [
+                            {
+                                "#content": type_ref.text,
+                                "-Primary": self.safe_get_attrib(type_ref, f"{namespace_tag}Primary")
+                            }
+                            for type_ref in contact_data_elem.findall(f"{namespace_tag}Phone_Number_Data/{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces)
+                        ],
+                        "-Public": self.safe_find_text(contact_data_elem.find(f"{namespace_tag}Phone_Number_Data/{namespace_tag}Usage_Data", namespaces), f"{namespace_tag}Public", namespaces)
+                    }
+                },
+                "Address_Data": {
+                    "Address_Line": [
+                        {
+                            "#content": address_line_elem.text,
+                            "-Descriptor": self.safe_get_attrib(address_line_elem, f"{namespace_tag}Descriptor"),
+                            "-Type": self.safe_get_attrib(address_line_elem, f"{namespace_tag}Type")
+                        }
+                        for address_line_elem in contact_data_elem.findall(f"{namespace_tag}Address_Data/{namespace_tag}Address_Line", namespaces)
+                    ],
+                    "Country_Reference": {
+                        "Country_ISO_Code": self.safe_find_text(contact_data_elem, f"{namespace_tag}Address_Data/{namespace_tag}Country_Reference/{namespace_tag}Country_ISO_Code", namespaces)
+                    },
+                    "Municipality": self.safe_find_text(contact_data_elem, f"{namespace_tag}Address_Data/{namespace_tag}Municipality", namespaces),
+                    "Postal_Code": self.safe_find_text(contact_data_elem, f"{namespace_tag}Address_Data/{namespace_tag}Postal_Code", namespaces),
+                    "Region": self.safe_find_text(contact_data_elem, f"{namespace_tag}Address_Data/{namespace_tag}Region", namespaces),
+                    "Subregion": {
+                        "-Descriptor": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Address_Data/{namespace_tag}Subregion", namespaces), f"{namespace_tag}Descriptor"),
+                        "-Type": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Address_Data/{namespace_tag}Subregion", namespaces), f"{namespace_tag}Type"),
+                        "#content": self.safe_find_text(contact_data_elem, f"{namespace_tag}Address_Data/{namespace_tag}Subregion", namespaces)
+                    },
+                    "-Effective_Date": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Address_Data", namespaces), f"{namespace_tag}Effective_Date"),
+                    "-Last_Modified": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Address_Data", namespaces), f"{namespace_tag}Last_Modified"),
+                    "Usage_Data": {
+                        "Type_Reference": {
+                            "#content": self.safe_find_text(contact_data_elem, f"{namespace_tag}Address_Data/{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces),
+                            "-Primary": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Address_Data/{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces), f"{namespace_tag}Primary"),
+                        },
+                        "-Public": self.safe_find_text(contact_data_elem.find(f"{namespace_tag}Address_Data/{namespace_tag}Usage_Data", namespaces), f"{namespace_tag}Public", namespaces),
+                        "Use_For_Reference": self.safe_find_text(contact_data_elem, f"{namespace_tag}Address_Data/{namespace_tag}Usage_Data/{namespace_tag}Use_For_Reference", namespaces)
+                    }
+                },
+            } if contact_data_elem is not None else None
+
+            demographic_data = {
+                "Hispanic_or_Latino": self.safe_find_text(demographic_data_elem, f"{namespace_tag}Hispanic_or_Latino", namespaces),
+                "Ethnicity_Reference": {
+                    "Ethnicity_Name": self.safe_find_text(demographic_data_elem, f"{namespace_tag}Ethnicity_Reference/{namespace_tag}Ethnicity_Name", namespaces)
+                },
+            } if demographic_data_elem is not None else None
+
+            name_data = {
+                "Effective_Date": self.safe_find_text(name_data_elem, f"{namespace_tag}Name_Data", namespaces),
+                "Is_Legal": self.safe_get_attrib(name_data_elem, f"{namespace_tag}Is_Legal"),
+                "Is_Preferred": self.safe_get_attrib(name_data_elem, f"{namespace_tag}Is_Preferred"),
+                "Last_Modified": self.safe_get_attrib(name_data_elem, f"{namespace_tag}Last_Modified"),
+                "Country_Reference": {
+                    "Country_ISO_Code": self.safe_find_text(name_data_elem, f"{namespace_tag}Country_Reference/{namespace_tag}Country_ISO_Code", namespaces)
+                },
+                "First_Name": self.safe_find_text(name_data_elem, f"{namespace_tag}First_Name", namespaces),
+                "Last_Name": {
+                    "#content": self.safe_find_text(name_data_elem, f"{namespace_tag}Last_Name", namespaces),
+                    "-Type": self.safe_get_attrib(name_data_elem.find(f"{namespace_tag}Last_Name", namespaces), f"{namespace_tag}Type"),
+                }
+            } if name_data_elem is not None else None
+
+            worker_personal_data = {
+                "Biographic_Data": biographic_data,
+                "Contact_Data": contact_data,
+                "Demographic_Data": demographic_data,
+                "Name_Data": name_data,
+            }
+
+            worker_profile_data["Worker_Personal_Data"] = worker_personal_data
+        
+
+        worker_position_data_elem = worker_profile_data_elem.find(f"{namespace_tag}Worker_Position_Data", namespaces)
+
+        if worker_position_data_elem is not None:
+            worker_position_data = {
+                "-Effective_Date": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Effective_Date", namespaces),
+                "Position_ID": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Position_ID", namespaces),
+                "Position_Title": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Position_Title", namespaces),
+                "Job_Exempt": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Job_Exempt", namespaces),
+                "Scheduled_Weekly_Hours": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Scheduled_Weekly_Hours", namespaces),
+                "Default_Weekly_Hours": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Default_Weekly_Hours", namespaces),
+                "Full_Time_Equivalent_Percentage": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Full_Time_Equivalent_Percentage", namespaces),
+                "Specify_Paid_FTE": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Specify_Paid_FTE", namespaces),
+                "Paid_FTE": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Paid_FTE", namespaces),
+                "Specify_Working_FTE": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Specify_Working_FTE", namespaces),
+                "Working_FTE": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Working_FTE", namespaces),
+            }
+
+            position_reference_elem = worker_position_data_elem.find(f"{namespace_tag}Position_Reference", namespaces)
+            position_reference = {
+                "Integration_ID_Reference": {
+                    "-Descriptor": self.safe_get_attrib(position_reference_elem.find(f"{namespace_tag}Integration_ID_Reference", namespaces), f"{namespace_tag}Descriptor"),
+                    "ID": [
+                        {
+                            "-System_ID": self.safe_get_attrib(id_elem, f"{namespace_tag}System_ID"),
+                            "#content": id_elem.text
+                        }
+                        for id_elem in position_reference_elem.findall(f"{namespace_tag}Integration_ID_Reference/{namespace_tag}ID", namespaces)
+                    ]
+                }
+            } if position_reference_elem is not None else None
+
+            employee_type_reference_elem = worker_position_data_elem.find(f"{namespace_tag}Employee_Type_Reference", namespaces)
+            employee_type_reference = {
+                "Employee_Type_Description": self.safe_find_text(employee_type_reference_elem, f"{namespace_tag}Employee_Type_Description", namespaces)
+            } if employee_type_reference_elem is not None else None
+
+            position_time_type_reference_elem = worker_position_data_elem.find(f"{namespace_tag}Position_Time_Type_Reference", namespaces)
+            position_time_type_reference = {
+                "Time_Type_Description": self.safe_find_text(position_time_type_reference_elem, f"{namespace_tag}Time_Type_Description", namespaces)
+            } if position_time_type_reference_elem is not None else None
+
+            job_profile_summary_data_elem = worker_position_data_elem.find(f"{namespace_tag}Job_Profile_Summary_Data", namespaces)
+            job_profile_summary_data = {
+                "Job_Profile_Reference": {
+                    "ID": [
+                        {
+                            "-type": self.safe_get_attrib(id_elem, f"{namespace_tag}type"),
+                            "#content": id_elem.text
+                        }
+                        for id_elem in job_profile_summary_data_elem.findall(f"{namespace_tag}Job_Profile_Reference/{namespace_tag}ID", namespaces)
+                    ]
+                },
+                "Job_Exempt": self.safe_find_text(job_profile_summary_data_elem, f"{namespace_tag}Job_Exempt", namespaces),
+                "Management_Level_Reference": {
+                    "ID": [
+                        {
+                            "-type": self.safe_get_attrib(id_elem, f"{namespace_tag}type"),
+                            "#content": id_elem.text
+                        }
+                        for id_elem in job_profile_summary_data_elem.findall(f"{namespace_tag}Management_Level_Reference/{namespace_tag}ID", namespaces)
+                    ]
+                },
+                "Job_Family_Reference": {
+                    "ID": [
+                        {
+                            "-type": self.safe_get_attrib(id_elem, f"{namespace_tag}type"),
+                            "#content": id_elem.text
+                        }
+                        for id_elem in job_profile_summary_data_elem.findall(f"{namespace_tag}Job_Family_Reference/{namespace_tag}ID", namespaces)
+                    ]
+                },
+                "Job_Profile_Name": self.safe_find_text(job_profile_summary_data_elem, f"{namespace_tag}Job_Profile_Name", namespaces),
+                "Work_Shift_Required": self.safe_find_text(job_profile_summary_data_elem, f"{namespace_tag}Work_Shift_Required", namespaces),
+                "Critical_Job": self.safe_find_text(job_profile_summary_data_elem, f"{namespace_tag}Critical_Job", namespaces)
+            } if job_profile_summary_data_elem is not None else None
+
+            organization_content_data_elems = worker_position_data_elem.findall(f"{namespace_tag}Organization_Content_Data", namespaces) if worker_position_data_elem is not None else []
+            organization_content_data = [
+                {
+                    "Integration_ID_Data": {
+                        "ID": [
+                            {
+                                "-System_ID": self.safe_get_attrib(id_elem, f"{namespace_tag}System_ID"),
+                                "#content": id_elem.text
+                            }
+                            for id_elem in org_content_elem.findall(f"{namespace_tag}Integration_ID_Data/{namespace_tag}ID", namespaces)
+                        ]
+                    },
+                    "Organization_Name": self.safe_find_text(org_content_elem, f"{namespace_tag}Organization_Name", namespaces),
+                    "Organization_Type_Reference": {
+                        "Organization_Type_Name": self.safe_find_text(org_content_elem, f"{namespace_tag}Organization_Type_Reference/{namespace_tag}Organization_Type_Name", namespaces)
+                    },
+                    "Organization_Subtype_Reference": {
+                        "Organization_Subtype_Name": self.safe_find_text(org_content_elem, f"{namespace_tag}Organization_Subtype_Reference/{namespace_tag}Organization_Subtype_Name", namespaces)
+                    }
+                }
+                for org_content_elem in organization_content_data_elems
+            ]
+
+            business_site_content_data_elem = worker_position_data_elem.find(f"{namespace_tag}Business_Site_Content_Data", namespaces)
+            business_site_content_data = {
+                "Integration_ID_Data": {
+                    "ID": [
+                        {
+                            "-System_ID": self.safe_get_attrib(id_elem, f"{namespace_tag}System_ID"),
+                            "#content": id_elem.text
+                        }
+                        for id_elem in business_site_content_data_elem.findall(f"{namespace_tag}Integration_ID_Data/{namespace_tag}ID", namespaces)
+                    ]
+                },
+                "Location_Name": self.safe_find_text(business_site_content_data_elem, f"{namespace_tag}Location_Name", namespaces),
+                "Location_Type_Reference": {
+                    "Location_Type_Description": self.safe_find_text(business_site_content_data_elem, f"{namespace_tag}Location_Type_Reference/{namespace_tag}Location_Type_Description", namespaces)
+                },
+                "Time_Profile_Reference": {
+                    "Time_Profile_Description": self.safe_find_text(business_site_content_data_elem, f"{namespace_tag}Time_Profile_Reference/{namespace_tag}Time_Profile_Description", namespaces)
+                }
+            } if business_site_content_data_elem is not None else None
+
+            payroll_processing_data_elem = worker_position_data_elem.find(f"{namespace_tag}Payroll_Processing_Data", namespaces)
+            payroll_processing_data = {
+                "Frequency_Reference": {
+                    "Frequency_Name": self.safe_find_text(payroll_processing_data_elem, f"{namespace_tag}Frequency_Reference/{namespace_tag}Frequency_Name", namespaces)
+                }
+            } if payroll_processing_data_elem is not None else None
+
+            supervisor_reference_elem = worker_position_data_elem.find(f"{namespace_tag}Supervisor_Reference", namespaces)
+            supervisor_reference = {
+                "Employee_Reference": {
+                    "Integration_ID_Reference": {
+                        "-Descriptor": self.safe_get_attrib(supervisor_reference_elem.find(f"{namespace_tag}Employee_Reference", namespaces), f"{namespace_tag}Descriptor"),
+                        "ID": [
+                            {
+                                "-System_ID": self.safe_get_attrib(id_elem, f"{namespace_tag}System_ID"),
+                                "#content": id_elem.text
+                            }
+                            for id_elem in supervisor_reference_elem.findall(f"{namespace_tag}Employee_Reference/{namespace_tag}Integration_ID_Reference/{namespace_tag}ID", namespaces)
+                        ]
+                    }
+                }
+            } if supervisor_reference_elem is not None else None
+
+            worker_position_data["Position_Reference"] = position_reference
+            worker_position_data["Employee_Type_Reference"] = employee_type_reference
+            worker_position_data["Position_Time_Type_Reference"] = position_time_type_reference
+            worker_position_data["Job_Profile_Summary_Data"] = job_profile_summary_data
+            worker_position_data["Organization_Content_Data"] = organization_content_data
+            worker_position_data["Business_Site_Content_Data"] = business_site_content_data
+            worker_position_data["Payroll_Processing_Data"] = payroll_processing_data
+            worker_position_data["Supervisor_Reference"] = supervisor_reference
+
+            worker_profile_data["Worker_Position_Data"] = worker_position_data
+        
+        profile_data["Worker_Profile_Data"] = worker_profile_data
+        return [profile_data]
+
+
 
     def parse_organization_hierarchies_response(
         self, response_data: ET.Element, namespaces: Dict[str, str]

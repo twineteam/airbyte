@@ -135,10 +135,9 @@ class KnoeticWorkdayStream(HttpStream, ABC):
             if current_page < total_pages:
                 next_page = current_page + 1
                 return {"page": next_page}
-            else:
-                return None
-        else:
-            raise ValueError("Required XML elements not found")
+        
+        # No need for a next page token if there is only one page
+        return None
 
     def path(
         self,
@@ -216,7 +215,7 @@ class Workers(KnoeticWorkdayStream):
         yield from parsed_response
 
 
-class WorkerProfiles(KnoeticWorkdayStream):
+class WorkerProfile(KnoeticWorkdayStream):
     primary_key = None
 
     def __init__(
@@ -241,8 +240,8 @@ class WorkerProfiles(KnoeticWorkdayStream):
             page=page,
             per_page=per_page,
         )
-
         self.worker_ids = worker_ids
+        self.current_worker_id = None
 
     def request_body_data(
         self,
@@ -250,6 +249,9 @@ class WorkerProfiles(KnoeticWorkdayStream):
         stream_slice: Mapping[str, Any] | None = None,
         next_page_token: Mapping[str, Any] | None = None,
     ) -> Mapping[str, Any] | str | None:
+        if stream_slice:
+            self.current_worker_id = stream_slice["worker_id"]
+        
         return self.workday_request.construct_request_body(
             "worker_profile.xml",
             self.tenant,
@@ -257,7 +259,7 @@ class WorkerProfiles(KnoeticWorkdayStream):
             self.password,
             self.page,
             self.per_page,
-        )
+        ).replace("PARENT_ID", self.current_worker_id)
 
     def parse_response(
         self,
@@ -271,6 +273,9 @@ class WorkerProfiles(KnoeticWorkdayStream):
         parsed_response = self.workday_request.parse_response(response, stream_name="worker_profile")
         for record in parsed_response:
             yield record
+    
+    def stream_slices(self, **kwargs) -> Iterable[Optional[Mapping[str, Any]]]:
+        return [{"worker_id": worker_id} for worker_id in self.worker_ids]
 
 
 class OrganizationHierarchies(KnoeticWorkdayStream):
@@ -981,11 +986,12 @@ class SourceKnoeticWorkday(AbstractSource):
 
         worker_ids = []
         for worker in workers_stream.read_records(sync_mode="full_refresh"):
-            print(worker)
-            worker_id = worker["Employee_ID"]
-            worker_ids.append(worker_id)
+            worker_reference = worker.get("Worker_Reference", [])
+            worker_id = next((ref['value'] for ref in worker_reference if ref.get('type') == 'WID'), None)
+            if worker_id:
+                worker_ids.append(worker_id)
 
-        worker_profiles_stream = WorkerProfiles(
+        worker_profile_stream = WorkerProfile(
             tenant=tenant,
             url=url,
             username=username,
@@ -997,7 +1003,7 @@ class SourceKnoeticWorkday(AbstractSource):
 
         return [
             workers_stream,
-            worker_profiles_stream,
+            worker_profile_stream,
             OrganizationHierarchies(
                 tenant=tenant,
                 url=url,
