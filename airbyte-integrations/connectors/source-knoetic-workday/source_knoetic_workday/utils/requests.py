@@ -311,13 +311,10 @@ class WorkdayRequest:
                         "Email_Address": self.safe_find_text(email_data_elem, f"{namespace_tag}Email_Address", namespaces),
                         "Usage_Data": {
                             "-Public": self.safe_get_attrib(email_data_elem.find(f"{namespace_tag}Usage_Data", namespaces), f"{namespace_tag}Public"),
-                            "Type_Reference": [
-                                {
-                                    "#content": type_ref.text,
-                                    "-Primary": self.safe_get_attrib(type_ref, f"{namespace_tag}Primary")
-                                }
-                                for type_ref in email_data_elem.findall(f"{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces)
-                            ]
+                            "Type_Reference": {
+                                "#content": self.safe_find_text(email_data_elem, f"{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces),
+                                "-Primary": self.safe_get_attrib(email_data_elem.find(f"{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces), f"{namespace_tag}Primary")
+                            }
                         }
                     }
                     for email_data_elem in contact_data_elem.findall(f"{namespace_tag}Internet_Email_Address_Data", namespaces)
@@ -331,14 +328,11 @@ class WorkdayRequest:
                         "Phone_Device_Type_Description": self.safe_find_text(contact_data_elem, f"{namespace_tag}Phone_Number_Data/{namespace_tag}Phone_Device_Type_Reference/{namespace_tag}Phone_Device_Type_Description", namespaces)
                     },
                     "Usage_Data": {
-                        "Type_Reference": [
-                            {
-                                "#content": type_ref.text,
-                                "-Primary": self.safe_get_attrib(type_ref, f"{namespace_tag}Primary")
-                            }
-                            for type_ref in contact_data_elem.findall(f"{namespace_tag}Phone_Number_Data/{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces)
-                        ],
-                        "-Public": self.safe_find_text(contact_data_elem.find(f"{namespace_tag}Phone_Number_Data/{namespace_tag}Usage_Data", namespaces), f"{namespace_tag}Public", namespaces)
+                        "Type_Reference": {
+                            "#content": self.safe_find_text(contact_data_elem, f"{namespace_tag}Phone_Number_Data/{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces),
+                            "-Primary": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Phone_Number_Data/{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces), f"{namespace_tag}Primary"),
+                        },
+                        "-Public": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Phone_Number_Data/{namespace_tag}Usage_Data", namespaces), f"{namespace_tag}Public"),
                     }
                 },
                 "Address_Data": {
@@ -368,7 +362,7 @@ class WorkdayRequest:
                             "#content": self.safe_find_text(contact_data_elem, f"{namespace_tag}Address_Data/{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces),
                             "-Primary": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Address_Data/{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces), f"{namespace_tag}Primary"),
                         },
-                        "-Public": self.safe_find_text(contact_data_elem.find(f"{namespace_tag}Address_Data/{namespace_tag}Usage_Data", namespaces), f"{namespace_tag}Public", namespaces),
+                        "-Public": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Address_Data/{namespace_tag}Usage_Data", namespaces), f"{namespace_tag}Public"),
                         "Use_For_Reference": self.safe_find_text(contact_data_elem, f"{namespace_tag}Address_Data/{namespace_tag}Usage_Data/{namespace_tag}Use_For_Reference", namespaces)
                     }
                 },
@@ -382,10 +376,10 @@ class WorkdayRequest:
             } if demographic_data_elem is not None else None
 
             name_data = {
-                "Effective_Date": self.safe_find_text(name_data_elem, f"{namespace_tag}Name_Data", namespaces),
-                "Is_Legal": self.safe_get_attrib(name_data_elem, f"{namespace_tag}Is_Legal"),
-                "Is_Preferred": self.safe_get_attrib(name_data_elem, f"{namespace_tag}Is_Preferred"),
-                "Last_Modified": self.safe_get_attrib(name_data_elem, f"{namespace_tag}Last_Modified"),
+                "-Effective_Date": self.safe_get_attrib(name_data_elem, f"{namespace_tag}Effective_Date"),
+                "-Is_Legal": self.safe_get_attrib(name_data_elem, f"{namespace_tag}Is_Legal"),
+                "-Is_Preferred": self.safe_get_attrib(name_data_elem, f"{namespace_tag}Is_Preferred"),
+                "-Last_Modified": self.safe_get_attrib(name_data_elem, f"{namespace_tag}Last_Modified"),
                 "Country_Reference": {
                     "Country_ISO_Code": self.safe_find_text(name_data_elem, f"{namespace_tag}Country_Reference/{namespace_tag}Country_ISO_Code", namespaces)
                 },
@@ -393,7 +387,8 @@ class WorkdayRequest:
                 "Last_Name": {
                     "#content": self.safe_find_text(name_data_elem, f"{namespace_tag}Last_Name", namespaces),
                     "-Type": self.safe_get_attrib(name_data_elem.find(f"{namespace_tag}Last_Name", namespaces), f"{namespace_tag}Type"),
-                }
+                },
+                "Middle_Name": self.safe_find_text(name_data_elem, f"{namespace_tag}Middle_Name", namespaces),
             } if name_data_elem is not None else None
 
             worker_personal_data = {
@@ -410,7 +405,7 @@ class WorkdayRequest:
 
         if worker_position_data_elem is not None:
             worker_position_data = {
-                "-Effective_Date": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Effective_Date", namespaces),
+                "-Effective_Date": self.safe_get_attrib(worker_position_data_elem, f"{namespace_tag}Effective_Date"),
                 "Position_ID": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Position_ID", namespaces),
                 "Position_Title": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Position_Title", namespaces),
                 "Job_Exempt": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Job_Exempt", namespaces),
@@ -477,6 +472,15 @@ class WorkdayRequest:
                         for id_elem in job_profile_summary_data_elem.findall(f"{namespace_tag}Job_Family_Reference/{namespace_tag}ID", namespaces)
                     ]
                 },
+                "Job_Category_Reference": {
+                    "ID": [
+                        {
+                            "-type": self.safe_get_attrib(id_elem, f"{namespace_tag}type"),
+                            "#content": id_elem.text
+                        }
+                        for id_elem in job_profile_summary_data_elem.findall(f"{namespace_tag}Job_Category_Reference/{namespace_tag}ID", namespaces)
+                    ]
+                },
                 "Job_Profile_Name": self.safe_find_text(job_profile_summary_data_elem, f"{namespace_tag}Job_Profile_Name", namespaces),
                 "Work_Shift_Required": self.safe_find_text(job_profile_summary_data_elem, f"{namespace_tag}Work_Shift_Required", namespaces),
                 "Critical_Job": self.safe_find_text(job_profile_summary_data_elem, f"{namespace_tag}Critical_Job", namespaces)
@@ -494,6 +498,7 @@ class WorkdayRequest:
                             for id_elem in org_content_elem.findall(f"{namespace_tag}Integration_ID_Data/{namespace_tag}ID", namespaces)
                         ]
                     },
+                    "Organization_ID": self.safe_find_text(org_content_elem, f"{namespace_tag}Organization_ID", namespaces),
                     "Organization_Name": self.safe_find_text(org_content_elem, f"{namespace_tag}Organization_Name", namespaces),
                     "Organization_Type_Reference": {
                         "Organization_Type_Name": self.safe_find_text(org_content_elem, f"{namespace_tag}Organization_Type_Reference/{namespace_tag}Organization_Type_Name", namespaces)
@@ -536,7 +541,7 @@ class WorkdayRequest:
             supervisor_reference = {
                 "Employee_Reference": {
                     "Integration_ID_Reference": {
-                        "-Descriptor": self.safe_get_attrib(supervisor_reference_elem.find(f"{namespace_tag}Employee_Reference", namespaces), f"{namespace_tag}Descriptor"),
+                        "-Descriptor": self.safe_get_attrib(supervisor_reference_elem.find(f"{namespace_tag}Employee_Reference/{namespace_tag}Integration_ID_Reference", namespaces), f"{namespace_tag}Descriptor"),
                         "ID": [
                             {
                                 "-System_ID": self.safe_get_attrib(id_elem, f"{namespace_tag}System_ID"),
