@@ -1,8 +1,10 @@
 import base64
 import csv
+import json
 import os
 import requests
 import xml.etree.ElementTree as ET
+import xmltodict
 
 from typing import Callable, Dict, List, Optional, Union
 
@@ -25,6 +27,10 @@ class WorkdayRequest:
             "worker_profile": {
                 "request_file": "worker_profile.xml",
                 "parse_response": self.parse_worker_profile_response,
+            },
+            "worker_details": {
+                "request_file": "worker_details.xml",
+                "parse_response": self.parse_worker_details_response,
             },
             "worker_details_photo": {
                 "request_file": "worker_details_photo.xml",
@@ -147,6 +153,37 @@ class WorkdayRequest:
 
         return element.attrib.get(attrib)
     
+    @staticmethod
+    def clean_json_string(json_string: str) -> str:
+        """
+        Cleans a JSON string by conforming xml attributes to expected format and prepended chars.
+
+        Args:
+            json_string (str): The JSON string to clean.
+
+        Returns:
+            str: The cleaned JSON string.
+        """
+        char_replacement_map = {
+            "ns0:" : "",
+            "\"@type\"": "\"-type\"",
+            "\"@Type\"": "\"-Type\"",
+            "\"@Descriptor\"": "\"-Descriptor\"",
+            "\"@System_ID\"": "\"-System_ID\"",
+            "\"@Effective_Date\"": "\"-Effective_Date\"",
+            "\"@Last_Modified\"": "\"-Last_Modified\"",
+            "\"@Public\"": "\"-Public\"",
+            "\"@Primary\"": "\"-Primary\"",
+            "\"@Is_Legal\"": "\"-Is_Legal\"",
+            "\"@Is_Preferred\"": "\"-Is_Preferred\"",
+            "\"#text\"": "\"#content\"",
+        }
+
+        for old_char, new_char in char_replacement_map.items():
+            json_string = json_string.replace(old_char, new_char)
+        
+        return json_string
+    
     def construct_request_body(
         self, file_name: str, tenant: str, username: str, password: str, page: int, per_page: int = 200
     ) -> str:
@@ -221,358 +258,46 @@ class WorkdayRequest:
         root = ET.fromstring(xml_data)
 
         namespaces = {"env": "http://schemas.xmlsoap.org/soap/envelope/", "wd": "urn:com.workday/bsvc"}
-        namespace_tag = f"{{{namespaces['wd']}}}"
 
-        profile = root.find(f".//wd:Worker_Profile", namespaces)
-        if profile is None:
+        worker_profile_elem = root.find(f".//wd:Worker_Profile", namespaces)
+        if worker_profile_elem is None:
             return None
         
-        worker_reference_elem = profile.find(f"{namespace_tag}Worker_Reference", namespaces)
-        employee_reference_elem = worker_reference_elem.find(f"{namespace_tag}Employee_Reference", namespaces)
-        contingent_worker_reference_elem = worker_reference_elem.find(f"{namespace_tag}Contingent_Worker_Reference", namespaces)
-
-        profile_data = {}
+        # Parse XML data into JSON
+        xml_input = ET.tostring(worker_profile_elem)
+        o = xmltodict.parse(xml_input=xml_input)
         
-        if employee_reference_elem is not None:
-            profile_data["Worker_Reference"] = {
-                "Employee_Reference": {
-                    "Integration_ID_Reference": {
-                        "-Descriptor": self.safe_get_attrib(employee_reference_elem.find(f"{namespace_tag}Integration_ID_Reference", namespaces), f"{namespace_tag}Descriptor"),
-                        "ID": [
-                            {
-                                "-System_ID": self.safe_get_attrib(id_elem, f"{namespace_tag}System_ID"),
-                                "#content": id_elem.text
-                            }
-                            for id_elem in employee_reference_elem.findall(f"{namespace_tag}Integration_ID_Reference/{namespace_tag}ID", namespaces)
-                        ]
-                    }
-                }
-            }
-        elif contingent_worker_reference_elem is not None:
-            profile_data["Worker_Reference"] = {
-                "Contingent_Worker_Reference": {
-                    "Integration_ID_Reference": {
-                        "-Descriptor": self.safe_get_attrib(contingent_worker_reference_elem.find(f"{namespace_tag}Integration_ID_Reference", namespaces), f"{namespace_tag}Descriptor"),
-                        "ID": [
-                            {
-                                "-System_ID": self.safe_get_attrib(id_elem, f"{namespace_tag}System_ID"),
-                                "#content": id_elem.text
-                            }
-                            for id_elem in contingent_worker_reference_elem.findall(f"{namespace_tag}Integration_ID_Reference/{namespace_tag}ID", namespaces)
-                        ]
-                    }
-                }
-            }
-
-        worker_profile_data_elem = profile.find(f"{namespace_tag}Worker_Profile_Data", namespaces)
-        worker_profile_data = {}
-
-        worker_status_data_elem = worker_profile_data_elem.find(f"{namespace_tag}Worker_Status_Data", namespaces)
-
-        if worker_status_data_elem is not None:
-            worker_status_data = {
-                "Active": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Active", namespaces),
-                "Hire_Date": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Hire_Date", namespaces),
-                "Original_Hire_Date": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Original_Hire_Date", namespaces),
-                "Hire_Reason": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Hire_Reason", namespaces),
-                "Continuous_Service_Date": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Continuous_Service_Date", namespaces),
-                "Retired": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Retired", namespaces),
-                "Seniority_Date": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Seniority_Date", namespaces),
-                "Days_Unemployed": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Days_Unemployed", namespaces),
-                "Months_Continuous_Prior_Employment": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Months_Continuous_Prior_Employment", namespaces),
-                "Probation_Status_Data": self.safe_find_text(worker_status_data_elem, f"{namespace_tag}Probation_Status_Data", namespaces),
-            }
-
-            termination_status_data_elem = worker_status_data_elem.find(f"{namespace_tag}Termination_Status_Data", namespaces)
-            termination_status_data = {
-                "Termination_Date": self.safe_find_text(termination_status_data_elem, f"{namespace_tag}Termination_Date", namespaces),
-                "Termination_Reason": self.safe_find_text(termination_status_data_elem, f"{namespace_tag}Termination_Reason", namespaces),
-                "Termination_Category": self.safe_find_text(termination_status_data_elem, f"{namespace_tag}Termination_Category", namespaces),
-                "Involuntary_Termination": self.safe_find_text(termination_status_data_elem, f"{namespace_tag}Involuntary_Termination", namespaces),
-                "Terminated": self.safe_find_text(termination_status_data_elem, f"{namespace_tag}Terminated", namespaces),
-            } if termination_status_data_elem is not None else None
-
-            worker_status_data["Termination_Status_Data"] = termination_status_data
-            worker_profile_data["Worker_Status_Data"] = worker_status_data
+        # Remove namespace prefix from keys
+        cleaned_json_string = self.clean_json_string(json.dumps(o))
+        json_data = json.loads(cleaned_json_string)
+        worker_profile_data = json_data.get("Worker_Profile", {}).get("Worker_Profile_Data")
         
-
-        worker_personal_data_elem = worker_profile_data_elem.find(f"{namespace_tag}Worker_Personal_Data", namespaces)
-        if worker_personal_data_elem is not None:
-            biographic_data_elem = worker_personal_data_elem.find(f"{namespace_tag}Biographic_Data", namespaces)
-            contact_data_elem = worker_personal_data_elem.find(f"{namespace_tag}Contact_Data", namespaces)
-            demographic_data_elem = worker_personal_data_elem.find(f"{namespace_tag}Demographic_Data", namespaces)
-            name_data_elem = worker_personal_data_elem.find(f"{namespace_tag}Name_Data", namespaces)
-
-            biographic_data = {
-                "Date_Of_Birth": self.safe_find_text(biographic_data_elem, f"{namespace_tag}Date_Of_Birth", namespaces),
-                "Gender_Reference": {
-                    "Gender_Description": self.safe_find_text(biographic_data_elem, f"{namespace_tag}Gender_Reference/{namespace_tag}Gender_Description", namespaces)
-                },
-                "Uses_Tobacco": self.safe_find_text(biographic_data_elem, f"{namespace_tag}Uses_Tobacco", namespaces),
-            } if biographic_data_elem is not None else None
-
-            contact_data = {
-                "Internet_Email_Address_Data": [
-                    {
-                        "Email_Address": self.safe_find_text(email_data_elem, f"{namespace_tag}Email_Address", namespaces),
-                        "Usage_Data": {
-                            "-Public": self.safe_get_attrib(email_data_elem.find(f"{namespace_tag}Usage_Data", namespaces), f"{namespace_tag}Public"),
-                            "Type_Reference": {
-                                "#content": self.safe_find_text(email_data_elem, f"{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces),
-                                "-Primary": self.safe_get_attrib(email_data_elem.find(f"{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces), f"{namespace_tag}Primary")
-                            }
-                        }
-                    }
-                    for email_data_elem in contact_data_elem.findall(f"{namespace_tag}Internet_Email_Address_Data", namespaces)
-                ],
-                "Phone_Number_Data": {
-                    "Country_ISO_Code": self.safe_find_text(contact_data_elem, f"{namespace_tag}Phone_Number_Data/{namespace_tag}Country_ISO_Code", namespaces),
-                    "International_Phone_Code": self.safe_find_text(contact_data_elem, f"{namespace_tag}Phone_Number_Data/{namespace_tag}International_Phone_Code", namespaces),
-                    "Area_Code": self.safe_find_text(contact_data_elem, f"{namespace_tag}Phone_Number_Data/{namespace_tag}Area_Code", namespaces),
-                    "Phone_Number": self.safe_find_text(contact_data_elem, f"{namespace_tag}Phone_Number_Data/{namespace_tag}Phone_Number", namespaces),
-                    "Phone_Device_Type_Reference": {
-                        "Phone_Device_Type_Description": self.safe_find_text(contact_data_elem, f"{namespace_tag}Phone_Number_Data/{namespace_tag}Phone_Device_Type_Reference/{namespace_tag}Phone_Device_Type_Description", namespaces)
-                    },
-                    "Usage_Data": {
-                        "Type_Reference": {
-                            "#content": self.safe_find_text(contact_data_elem, f"{namespace_tag}Phone_Number_Data/{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces),
-                            "-Primary": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Phone_Number_Data/{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces), f"{namespace_tag}Primary"),
-                        },
-                        "-Public": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Phone_Number_Data/{namespace_tag}Usage_Data", namespaces), f"{namespace_tag}Public"),
-                    }
-                },
-                "Address_Data": {
-                    "Address_Line": [
-                        {
-                            "#content": address_line_elem.text,
-                            "-Descriptor": self.safe_get_attrib(address_line_elem, f"{namespace_tag}Descriptor"),
-                            "-Type": self.safe_get_attrib(address_line_elem, f"{namespace_tag}Type")
-                        }
-                        for address_line_elem in contact_data_elem.findall(f"{namespace_tag}Address_Data/{namespace_tag}Address_Line", namespaces)
-                    ],
-                    "Country_Reference": {
-                        "Country_ISO_Code": self.safe_find_text(contact_data_elem, f"{namespace_tag}Address_Data/{namespace_tag}Country_Reference/{namespace_tag}Country_ISO_Code", namespaces)
-                    },
-                    "Municipality": self.safe_find_text(contact_data_elem, f"{namespace_tag}Address_Data/{namespace_tag}Municipality", namespaces),
-                    "Postal_Code": self.safe_find_text(contact_data_elem, f"{namespace_tag}Address_Data/{namespace_tag}Postal_Code", namespaces),
-                    "Region": self.safe_find_text(contact_data_elem, f"{namespace_tag}Address_Data/{namespace_tag}Region", namespaces),
-                    "Subregion": {
-                        "-Descriptor": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Address_Data/{namespace_tag}Subregion", namespaces), f"{namespace_tag}Descriptor"),
-                        "-Type": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Address_Data/{namespace_tag}Subregion", namespaces), f"{namespace_tag}Type"),
-                        "#content": self.safe_find_text(contact_data_elem, f"{namespace_tag}Address_Data/{namespace_tag}Subregion", namespaces)
-                    },
-                    "-Effective_Date": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Address_Data", namespaces), f"{namespace_tag}Effective_Date"),
-                    "-Last_Modified": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Address_Data", namespaces), f"{namespace_tag}Last_Modified"),
-                    "Usage_Data": {
-                        "Type_Reference": {
-                            "#content": self.safe_find_text(contact_data_elem, f"{namespace_tag}Address_Data/{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces),
-                            "-Primary": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Address_Data/{namespace_tag}Usage_Data/{namespace_tag}Type_Reference", namespaces), f"{namespace_tag}Primary"),
-                        },
-                        "-Public": self.safe_get_attrib(contact_data_elem.find(f"{namespace_tag}Address_Data/{namespace_tag}Usage_Data", namespaces), f"{namespace_tag}Public"),
-                        "Use_For_Reference": self.safe_find_text(contact_data_elem, f"{namespace_tag}Address_Data/{namespace_tag}Usage_Data/{namespace_tag}Use_For_Reference", namespaces)
-                    }
-                },
-            } if contact_data_elem is not None else None
-
-            demographic_data = {
-                "Hispanic_or_Latino": self.safe_find_text(demographic_data_elem, f"{namespace_tag}Hispanic_or_Latino", namespaces),
-                "Ethnicity_Reference": {
-                    "Ethnicity_Name": self.safe_find_text(demographic_data_elem, f"{namespace_tag}Ethnicity_Reference/{namespace_tag}Ethnicity_Name", namespaces)
-                },
-            } if demographic_data_elem is not None else None
-
-            name_data = {
-                "-Effective_Date": self.safe_get_attrib(name_data_elem, f"{namespace_tag}Effective_Date"),
-                "-Is_Legal": self.safe_get_attrib(name_data_elem, f"{namespace_tag}Is_Legal"),
-                "-Is_Preferred": self.safe_get_attrib(name_data_elem, f"{namespace_tag}Is_Preferred"),
-                "-Last_Modified": self.safe_get_attrib(name_data_elem, f"{namespace_tag}Last_Modified"),
-                "Country_Reference": {
-                    "Country_ISO_Code": self.safe_find_text(name_data_elem, f"{namespace_tag}Country_Reference/{namespace_tag}Country_ISO_Code", namespaces)
-                },
-                "First_Name": self.safe_find_text(name_data_elem, f"{namespace_tag}First_Name", namespaces),
-                "Last_Name": {
-                    "#content": self.safe_find_text(name_data_elem, f"{namespace_tag}Last_Name", namespaces),
-                    "-Type": self.safe_get_attrib(name_data_elem.find(f"{namespace_tag}Last_Name", namespaces), f"{namespace_tag}Type"),
-                },
-                "Middle_Name": self.safe_find_text(name_data_elem, f"{namespace_tag}Middle_Name", namespaces),
-            } if name_data_elem is not None else None
-
-            worker_personal_data = {
-                "Biographic_Data": biographic_data,
-                "Contact_Data": contact_data,
-                "Demographic_Data": demographic_data,
-                "Name_Data": name_data,
-            }
-
-            worker_profile_data["Worker_Personal_Data"] = worker_personal_data
+        if worker_profile_data is not None:
+            return [worker_profile_data]
         
+        return []
 
-        worker_position_data_elem = worker_profile_data_elem.find(f"{namespace_tag}Worker_Position_Data", namespaces)
+    def parse_worker_details_response(self, response_data: ET.Element, namespaces: Dict[str, str]) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+        worker_details: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+        worker_elem = response_data.find("{urn:com.workday/bsvc}Worker", namespaces)
 
-        if worker_position_data_elem is not None:
-            worker_position_data = {
-                "-Effective_Date": self.safe_get_attrib(worker_position_data_elem, f"{namespace_tag}Effective_Date"),
-                "Position_ID": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Position_ID", namespaces),
-                "Position_Title": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Position_Title", namespaces),
-                "Job_Exempt": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Job_Exempt", namespaces),
-                "Scheduled_Weekly_Hours": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Scheduled_Weekly_Hours", namespaces),
-                "Default_Weekly_Hours": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Default_Weekly_Hours", namespaces),
-                "Full_Time_Equivalent_Percentage": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Full_Time_Equivalent_Percentage", namespaces),
-                "Specify_Paid_FTE": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Specify_Paid_FTE", namespaces),
-                "Paid_FTE": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Paid_FTE", namespaces),
-                "Specify_Working_FTE": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Specify_Working_FTE", namespaces),
-                "Working_FTE": self.safe_find_text(worker_position_data_elem, f"{namespace_tag}Working_FTE", namespaces),
-            }
+        if worker_elem is None:
+            return worker_details
 
-            position_reference_elem = worker_position_data_elem.find(f"{namespace_tag}Position_Reference", namespaces)
-            position_reference = {
-                "Integration_ID_Reference": {
-                    "-Descriptor": self.safe_get_attrib(position_reference_elem.find(f"{namespace_tag}Integration_ID_Reference", namespaces), f"{namespace_tag}Descriptor"),
-                    "ID": [
-                        {
-                            "-System_ID": self.safe_get_attrib(id_elem, f"{namespace_tag}System_ID"),
-                            "#content": id_elem.text
-                        }
-                        for id_elem in position_reference_elem.findall(f"{namespace_tag}Integration_ID_Reference/{namespace_tag}ID", namespaces)
-                    ]
-                }
-            } if position_reference_elem is not None else None
-
-            employee_type_reference_elem = worker_position_data_elem.find(f"{namespace_tag}Employee_Type_Reference", namespaces)
-            employee_type_reference = {
-                "Employee_Type_Description": self.safe_find_text(employee_type_reference_elem, f"{namespace_tag}Employee_Type_Description", namespaces)
-            } if employee_type_reference_elem is not None else None
-
-            position_time_type_reference_elem = worker_position_data_elem.find(f"{namespace_tag}Position_Time_Type_Reference", namespaces)
-            position_time_type_reference = {
-                "Time_Type_Description": self.safe_find_text(position_time_type_reference_elem, f"{namespace_tag}Time_Type_Description", namespaces)
-            } if position_time_type_reference_elem is not None else None
-
-            job_profile_summary_data_elem = worker_position_data_elem.find(f"{namespace_tag}Job_Profile_Summary_Data", namespaces)
-            job_profile_summary_data = {
-                "Job_Profile_Reference": {
-                    "ID": [
-                        {
-                            "-type": self.safe_get_attrib(id_elem, f"{namespace_tag}type"),
-                            "#content": id_elem.text
-                        }
-                        for id_elem in job_profile_summary_data_elem.findall(f"{namespace_tag}Job_Profile_Reference/{namespace_tag}ID", namespaces)
-                    ]
-                },
-                "Job_Exempt": self.safe_find_text(job_profile_summary_data_elem, f"{namespace_tag}Job_Exempt", namespaces),
-                "Management_Level_Reference": {
-                    "ID": [
-                        {
-                            "-type": self.safe_get_attrib(id_elem, f"{namespace_tag}type"),
-                            "#content": id_elem.text
-                        }
-                        for id_elem in job_profile_summary_data_elem.findall(f"{namespace_tag}Management_Level_Reference/{namespace_tag}ID", namespaces)
-                    ]
-                },
-                "Job_Family_Reference": {
-                    "ID": [
-                        {
-                            "-type": self.safe_get_attrib(id_elem, f"{namespace_tag}type"),
-                            "#content": id_elem.text
-                        }
-                        for id_elem in job_profile_summary_data_elem.findall(f"{namespace_tag}Job_Family_Reference/{namespace_tag}ID", namespaces)
-                    ]
-                },
-                "Job_Category_Reference": {
-                    "ID": [
-                        {
-                            "-type": self.safe_get_attrib(id_elem, f"{namespace_tag}type"),
-                            "#content": id_elem.text
-                        }
-                        for id_elem in job_profile_summary_data_elem.findall(f"{namespace_tag}Job_Category_Reference/{namespace_tag}ID", namespaces)
-                    ]
-                },
-                "Job_Profile_Name": self.safe_find_text(job_profile_summary_data_elem, f"{namespace_tag}Job_Profile_Name", namespaces),
-                "Work_Shift_Required": self.safe_find_text(job_profile_summary_data_elem, f"{namespace_tag}Work_Shift_Required", namespaces),
-                "Critical_Job": self.safe_find_text(job_profile_summary_data_elem, f"{namespace_tag}Critical_Job", namespaces)
-            } if job_profile_summary_data_elem is not None else None
-
-            organization_content_data_elems = worker_position_data_elem.findall(f"{namespace_tag}Organization_Content_Data", namespaces) if worker_position_data_elem is not None else []
-            organization_content_data = [
-                {
-                    "Integration_ID_Data": {
-                        "ID": [
-                            {
-                                "-System_ID": self.safe_get_attrib(id_elem, f"{namespace_tag}System_ID"),
-                                "#content": id_elem.text
-                            }
-                            for id_elem in org_content_elem.findall(f"{namespace_tag}Integration_ID_Data/{namespace_tag}ID", namespaces)
-                        ]
-                    },
-                    "Organization_ID": self.safe_find_text(org_content_elem, f"{namespace_tag}Organization_ID", namespaces),
-                    "Organization_Name": self.safe_find_text(org_content_elem, f"{namespace_tag}Organization_Name", namespaces),
-                    "Organization_Type_Reference": {
-                        "Organization_Type_Name": self.safe_find_text(org_content_elem, f"{namespace_tag}Organization_Type_Reference/{namespace_tag}Organization_Type_Name", namespaces)
-                    },
-                    "Organization_Subtype_Reference": {
-                        "Organization_Subtype_Name": self.safe_find_text(org_content_elem, f"{namespace_tag}Organization_Subtype_Reference/{namespace_tag}Organization_Subtype_Name", namespaces)
-                    }
-                }
-                for org_content_elem in organization_content_data_elems
-            ]
-
-            business_site_content_data_elem = worker_position_data_elem.find(f"{namespace_tag}Business_Site_Content_Data", namespaces)
-            business_site_content_data = {
-                "Integration_ID_Data": {
-                    "ID": [
-                        {
-                            "-System_ID": self.safe_get_attrib(id_elem, f"{namespace_tag}System_ID"),
-                            "#content": id_elem.text
-                        }
-                        for id_elem in business_site_content_data_elem.findall(f"{namespace_tag}Integration_ID_Data/{namespace_tag}ID", namespaces)
-                    ]
-                },
-                "Location_Name": self.safe_find_text(business_site_content_data_elem, f"{namespace_tag}Location_Name", namespaces),
-                "Location_Type_Reference": {
-                    "Location_Type_Description": self.safe_find_text(business_site_content_data_elem, f"{namespace_tag}Location_Type_Reference/{namespace_tag}Location_Type_Description", namespaces)
-                },
-                "Time_Profile_Reference": {
-                    "Time_Profile_Description": self.safe_find_text(business_site_content_data_elem, f"{namespace_tag}Time_Profile_Reference/{namespace_tag}Time_Profile_Description", namespaces)
-                }
-            } if business_site_content_data_elem is not None else None
-
-            payroll_processing_data_elem = worker_position_data_elem.find(f"{namespace_tag}Payroll_Processing_Data", namespaces)
-            payroll_processing_data = {
-                "Frequency_Reference": {
-                    "Frequency_Name": self.safe_find_text(payroll_processing_data_elem, f"{namespace_tag}Frequency_Reference/{namespace_tag}Frequency_Name", namespaces)
-                }
-            } if payroll_processing_data_elem is not None else None
-
-            supervisor_reference_elem = worker_position_data_elem.find(f"{namespace_tag}Supervisor_Reference", namespaces)
-            supervisor_reference = {
-                "Employee_Reference": {
-                    "Integration_ID_Reference": {
-                        "-Descriptor": self.safe_get_attrib(supervisor_reference_elem.find(f"{namespace_tag}Employee_Reference/{namespace_tag}Integration_ID_Reference", namespaces), f"{namespace_tag}Descriptor"),
-                        "ID": [
-                            {
-                                "-System_ID": self.safe_get_attrib(id_elem, f"{namespace_tag}System_ID"),
-                                "#content": id_elem.text
-                            }
-                            for id_elem in supervisor_reference_elem.findall(f"{namespace_tag}Employee_Reference/{namespace_tag}Integration_ID_Reference/{namespace_tag}ID", namespaces)
-                        ]
-                    }
-                }
-            } if supervisor_reference_elem is not None else None
-
-            worker_position_data["Position_Reference"] = position_reference
-            worker_position_data["Employee_Type_Reference"] = employee_type_reference
-            worker_position_data["Position_Time_Type_Reference"] = position_time_type_reference
-            worker_position_data["Job_Profile_Summary_Data"] = job_profile_summary_data
-            worker_position_data["Organization_Content_Data"] = organization_content_data
-            worker_position_data["Business_Site_Content_Data"] = business_site_content_data
-            worker_position_data["Payroll_Processing_Data"] = payroll_processing_data
-            worker_position_data["Supervisor_Reference"] = supervisor_reference
-
-            worker_profile_data["Worker_Position_Data"] = worker_position_data
+        # Parse XML data into JSON
+        xml_input = ET.tostring(worker_elem)
+        o = xmltodict.parse(xml_input=xml_input)
         
-        profile_data["Worker_Profile_Data"] = worker_profile_data
-        return [profile_data]
-
+        # Remove namespace prefix from keys
+        cleaned_json_string = self.clean_json_string(json.dumps(o))
+        json_data = json.loads(cleaned_json_string)
+        worker_data = json_data.get("Worker")
+        
+        if worker_data is not None:
+            worker_details.append(worker_data)
+        
+        return worker_details
+    
 
     def parse_worker_details_photo_response(self, response_data: ET.Element, namespaces: Dict[str, str]) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
         worker_details_photo: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
@@ -642,130 +367,17 @@ class WorkdayRequest:
         organization_hierarchies: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
 
         for org in response_data.findall("{urn:com.workday/bsvc}Organization", namespaces):
-            org_reference_elem = org.find("{urn:com.workday/bsvc}Organization_Reference", namespaces)
-            org_data_elem = org.find("{urn:com.workday/bsvc}Organization_Data", namespaces)
+            # Parse XML data into JSON
+            xml_input = ET.tostring(org)
+            o = xmltodict.parse(xml_input=xml_input)
+            
+            # Remove namespace prefix from keys
+            cleaned_json_string = self.clean_json_string(json.dumps(o))
+            json_data = json.loads(cleaned_json_string)
+            org_data = json_data.get("Organization")
 
-            org_reference = {
-                "ID": [
-                    {
-                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                    }
-                    for id_elem in org_reference_elem.findall("{urn:com.workday/bsvc}ID", namespaces)
-                ]
-            }
-
-            org_data = {
-                "Reference_ID": self.safe_find_text(org_data_elem, "{urn:com.workday/bsvc}Reference_ID", namespaces),
-                "Name": self.safe_find_text(org_data_elem, "{urn:com.workday/bsvc}Name", namespaces),
-                "Availibility_Date": self.safe_find_text(
-                    org_data_elem, "{urn:com.workday/bsvc}Availibility_Date", namespaces
-                ),
-                "Last_Updated_DateTime": self.safe_find_text(
-                    org_data_elem, "{urn:com.workday/bsvc}Last_Updated_DateTime", namespaces
-                ),
-                "Inactive": self.safe_find_text(org_data_elem, "{urn:com.workday/bsvc}Inactive", namespaces),
-                "Include_Manager_in_Name": self.safe_find_text(
-                    org_data_elem, "{urn:com.workday/bsvc}Include_Manager_in_Name", namespaces
-                ),
-                "Include_Organization_Code_in_Name": self.safe_find_text(
-                    org_data_elem, "{urn:com.workday/bsvc}Include_Organization_Code_in_Name", namespaces
-                ),
-                "Organization_Type_Reference": {
-                    "ID": (
-                        [
-                            {
-                                "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                            }
-                            for id_elem in org_data_elem.find(
-                                "{urn:com.workday/bsvc}Organization_Type_Reference", namespaces
-                            ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                        ]
-                        if org_data_elem.find("{urn:com.workday/bsvc}Organization_Type_Reference", namespaces)
-                        is not None
-                        else []
-                    )
-                },
-                "Organization_Subtype_Reference": {
-                    "ID": (
-                        [
-                            {
-                                "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                            }
-                            for id_elem in org_data_elem.find(
-                                "{urn:com.workday/bsvc}Organization_Subtype_Reference", namespaces
-                            ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                        ]
-                        if org_data_elem.find("{urn:com.workday/bsvc}Organization_Subtype_Reference", namespaces)
-                        is not None
-                        else []
-                    )
-                },
-                "Organization_Visibility_Reference": {
-                    "ID": (
-                        [
-                            {
-                                "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                            }
-                            for id_elem in org_data_elem.find(
-                                "{urn:com.workday/bsvc}Organization_Visibility_Reference", namespaces
-                            ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                        ]
-                        if org_data_elem.find("{urn:com.workday/bsvc}Organization_Visibility_Reference", namespaces)
-                        is not None
-                        else []
-                    )
-                },
-                "External_IDs_Data": {
-                    "ID": (
-                        [
-                            {
-                                "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                "-System_ID": id_elem.attrib.get(
-                                    "{urn:com.workday/bsvc}System_ID", "Unknown System ID"
-                                ),
-                            }
-                            for id_elem in org_data_elem.find(
-                                "{urn:com.workday/bsvc}External_IDs_Data", namespaces
-                            ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                        ]
-                        if org_data_elem.find("{urn:com.workday/bsvc}External_IDs_Data", namespaces) is not None
-                        else []
-                    )
-                },
-                "Hierarchy_Data": {
-                    "Top-Level_Organization_Reference": {
-                        "ID": (
-                            [
-                                {
-                                    "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                    "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                                }
-                                for id_elem in org_data_elem.find(
-                                    "{urn:com.workday/bsvc}Hierarchy_Data/{urn:com.workday/bsvc}Top-Level_Organization_Reference",
-                                    namespaces,
-                                ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                            ]
-                            if org_data_elem.find(
-                                "{urn:com.workday/bsvc}Hierarchy_Data/{urn:com.workday/bsvc}Top-Level_Organization_Reference",
-                                namespaces,
-                            )
-                            is not None
-                            else []
-                        )
-                    }
-                },
-            }
-
-            organization_hierarchies.append(
-                {
-                    "Organization_Reference": org_reference,
-                    "Organization_Data": org_data,
-                }
-            )
+            if org_data is not None:
+                organization_hierarchies.append(org_data)
 
         return organization_hierarchies
 
@@ -779,64 +391,17 @@ class WorkdayRequest:
             return ethnicities
 
         for ethnicity in response_data.findall("{urn:com.workday/bsvc}Ethnicity", namespaces):
-            ethnicity_reference_elem = ethnicity.find("{urn:com.workday/bsvc}Ethnicity_Reference", namespaces)
-            ethnicity_data_elem = ethnicity.find("{urn:com.workday/bsvc}Ethnicity_Data", namespaces)
+            # Parse XML data into JSON
+            xml_input = ET.tostring(ethnicity)
+            o = xmltodict.parse(xml_input=xml_input)
+            
+            # Remove namespace prefix from keys
+            cleaned_json_string = self.clean_json_string(json.dumps(o))
+            json_data = json.loads(cleaned_json_string)
+            ethnicity_data = json_data.get("Ethnicity")
 
-            ethnicity_reference = {
-                "ID": [
-                    {
-                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                    }
-                    for id_elem in ethnicity_reference_elem.findall("{urn:com.workday/bsvc}ID", namespaces)
-                ]
-            }
-
-            location_reference = {
-                "ID": (
-                    [
-                        {
-                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                        }
-                        for id_elem in ethnicity_data_elem.find(
-                            "{urn:com.workday/bsvc}Location_Reference", namespaces
-                        ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                    ]
-                    if ethnicity_data_elem.find("{urn:com.workday/bsvc}Location_Reference", namespaces) is not None
-                    else []
-                )
-            }
-
-            ethnicity_mapping_reference = {
-                "ID": (
-                    [
-                        {
-                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                        }
-                        for id_elem in ethnicity_data_elem.find(
-                            "{urn:com.workday/bsvc}Ethnicity_Mapping_Reference", namespaces
-                        ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                    ]
-                    if ethnicity_data_elem.find("{urn:com.workday/bsvc}Ethnicity_Mapping_Reference", namespaces)
-                    is not None
-                    else []
-                )
-            }
-
-            ethnicity_data = {
-                "ID": self.safe_find_text(ethnicity_data_elem, "{urn:com.workday/bsvc}ID", namespaces),
-                "Name": self.safe_find_text(ethnicity_data_elem, "{urn:com.workday/bsvc}Name", namespaces),
-                "Description": self.safe_find_text(
-                    ethnicity_data_elem, "{urn:com.workday/bsvc}Description", namespaces
-                ),
-                "Location_Reference": location_reference,
-                "Ethnicity_Mapping_Reference": ethnicity_mapping_reference,
-                "Inactive": self.safe_find_text(ethnicity_data_elem, "{urn:com.workday/bsvc}Inactive", namespaces),
-            }
-
-            ethnicities.append({"Ethnicity_Reference": ethnicity_reference, "Ethnicity_Data": ethnicity_data})
+            if ethnicity_data is not None:
+                ethnicities.append(ethnicity_data)
 
         return ethnicities
 
@@ -850,37 +415,17 @@ class WorkdayRequest:
             return gender_identities
 
         for gender_identity in response_data.findall("{urn:com.workday/bsvc}Gender_Identity", namespaces):
-            gender_identity_reference_elem = gender_identity.find(
-                "{urn:com.workday/bsvc}Gender_Identity_Reference", namespaces
-            )
-            gender_identity_data_elem = gender_identity.find("{urn:com.workday/bsvc}Gender_Identity_Data", namespaces)
+            # Parse XML data into JSON
+            xml_input = ET.tostring(gender_identity)
+            o = xmltodict.parse(xml_input=xml_input)
+            
+            # Remove namespace prefix from keys
+            cleaned_json_string = self.clean_json_string(json.dumps(o))
+            json_data = json.loads(cleaned_json_string)
+            gender_identity_data = json_data.get("Gender_Identity")
 
-            gender_identity_reference = {
-                "ID": [
-                    {
-                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                    }
-                    for id_elem in gender_identity_reference_elem.findall("{urn:com.workday/bsvc}ID", namespaces)
-                ]
-            }
-
-            gender_identity_data = {
-                "ID": self.safe_find_text(gender_identity_data_elem, "{urn:com.workday/bsvc}ID", namespaces),
-                "Gender_Identity_Name": self.safe_find_text(
-                    gender_identity_data_elem, "{urn:com.workday/bsvc}Gender_Identity_Name", namespaces
-                ),
-                "Gender_Identity_Code": self.safe_find_text(
-                    gender_identity_data_elem, "{urn:com.workday/bsvc}Gender_Identity_Code", namespaces
-                ),
-                "Gender_Identity_Inactive": self.safe_find_text(
-                    gender_identity_data_elem, "{urn:com.workday/bsvc}Gender_Identity_Inactive", namespaces
-                ),
-            }
-
-            gender_identities.append(
-                {"Gender_Identity_Reference": gender_identity_reference, "Gender_Identity_Data": gender_identity_data}
-            )
+            if gender_identity_data is not None:
+                gender_identities.append(gender_identity_data)
 
         return gender_identities
 
@@ -893,296 +438,17 @@ class WorkdayRequest:
             return locations
 
         for location in response_data.findall("{urn:com.workday/bsvc}Location", namespaces):
-            location_reference_elem = location.find("{urn:com.workday/bsvc}Location_Reference", namespaces)
-            location_data_elem = location.find("{urn:com.workday/bsvc}Location_Data", namespaces)
+            # Parse XML data into JSON
+            xml_input = ET.tostring(location)
+            o = xmltodict.parse(xml_input=xml_input)
+            
+            # Remove namespace prefix from keys
+            cleaned_json_string = self.clean_json_string(json.dumps(o))
+            json_data = json.loads(cleaned_json_string)
+            location_data = json_data.get("Location")
 
-            location_reference = {
-                "ID": [
-                    {
-                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                    }
-                    for id_elem in location_reference_elem.findall("{urn:com.workday/bsvc}ID", namespaces)
-                ]
-            }
-
-            location_usage_reference = {
-                "ID": (
-                    [
-                        {
-                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                        }
-                        for id_elem in location_data_elem.find(
-                            "{urn:com.workday/bsvc}Location_Usage_Reference", namespaces
-                        ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                    ]
-                    if location_data_elem.find("{urn:com.workday/bsvc}Location_Usage_Reference", namespaces) is not None
-                    else []
-                )
-            }
-
-            location_type_reference = {
-                "ID": (
-                    [
-                        {
-                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                        }
-                        for id_elem in location_data_elem.find(
-                            "{urn:com.workday/bsvc}Location_Type_Reference", namespaces
-                        ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                    ]
-                    if location_data_elem.find("{urn:com.workday/bsvc}Location_Type_Reference", namespaces) is not None
-                    else []
-                )
-            }
-
-            location_hierarchy_reference = {
-                "ID": (
-                    [
-                        {
-                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                        }
-                        for id_elem in location_data_elem.find(
-                            "{urn:com.workday/bsvc}Location_Hierarchy_Reference", namespaces
-                        ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                    ]
-                    if location_data_elem.find("{urn:com.workday/bsvc}Location_Hierarchy_Reference", namespaces)
-                    is not None
-                    else []
-                )
-            }
-
-            time_profile_reference = {
-                "ID": (
-                    [
-                        {
-                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                        }
-                        for id_elem in location_data_elem.find(
-                            "{urn:com.workday/bsvc}Time_Profile_Reference", namespaces
-                        ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                    ]
-                    if location_data_elem.find("{urn:com.workday/bsvc}Time_Profile_Reference", namespaces) is not None
-                    else []
-                )
-            }
-
-            integration_id_data = {
-                "ID": (
-                    [
-                        {
-                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                            "-System_ID": id_elem.attrib.get("{urn:com.workday/bsvc}System_ID", "Unknown Type"),
-                        }
-                        for id_elem in location_data_elem.find(
-                            "{urn:com.workday/bsvc}Integration_ID_Data", namespaces
-                        ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                    ]
-                    if location_data_elem.find("{urn:com.workday/bsvc}Integration_ID_Data", namespaces) is not None
-                    else []
-                )
-            }
-
-            locale_reference = {
-                "ID": (
-                    [
-                        {
-                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                        }
-                        for id_elem in location_data_elem.find(
-                            "{urn:com.workday/bsvc}Locale_Reference", namespaces
-                        ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                    ]
-                    if location_data_elem.find("{urn:com.workday/bsvc}Locale_Reference", namespaces) is not None
-                    else []
-                )
-            }
-
-            time_zone_reference = {
-                "ID": (
-                    [
-                        {
-                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                        }
-                        for id_elem in location_data_elem.find(
-                            "{urn:com.workday/bsvc}Time_Zone_Reference", namespaces
-                        ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                    ]
-                    if location_data_elem.find("{urn:com.workday/bsvc}Time_Zone_Reference", namespaces) is not None
-                    else []
-                )
-            }
-
-            default_currency_reference = {
-                "ID": (
-                    [
-                        {
-                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                        }
-                        for id_elem in location_data_elem.find(
-                            "{urn:com.workday/bsvc}Default_Currency_Reference", namespaces
-                        ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                    ]
-                    if location_data_elem.find("{urn:com.workday/bsvc}Default_Currency_Reference", namespaces)
-                    is not None
-                    else []
-                )
-            }
-
-            contact_data_elem = location_data_elem.find("{urn:com.workday/bsvc}Contact_Data", namespaces)
-            address_data_elem = (
-                contact_data_elem.find("{urn:com.workday/bsvc}Address_Data", namespaces)
-                if contact_data_elem is not None
-                else None
-            )
-            address_data = (
-                {
-                    "-Address_Format_Type": address_data_elem.attrib.get("{urn:com.workday/bsvc}Address_Format_Type"),
-                    "-Defaulted_Business_Site_Address": address_data_elem.attrib.get(
-                        "{urn:com.workday/bsvc}Defaulted_Business_Site_Address"
-                    ),
-                    "-Effective_Date": address_data_elem.attrib.get("{urn:com.workday/bsvc}Effective_Date"),
-                    "-Formatted_Address": address_data_elem.attrib.get("{urn:com.workday/bsvc}Formatted_Address"),
-                    "Address_ID": self.safe_find_text(
-                        address_data_elem, "{urn:com.workday/bsvc}Address_ID", namespaces
-                    ),
-                    "Address_Line_Data": {
-                        "#content": self.safe_find_text(
-                            address_data_elem, "{urn:com.workday/bsvc}Address_Line_Data", namespaces
-                        ),
-                        "-Descriptor": address_data_elem.find(
-                            "{urn:com.workday/bsvc}Address_Line_Data", namespaces
-                        ).attrib.get("{urn:com.workday/bsvc}Descriptor"),
-                        "-Type": address_data_elem.find(
-                            "{urn:com.workday/bsvc}Address_Line_Data", namespaces
-                        ).attrib.get("{urn:com.workday/bsvc}Type"),
-                    },
-                    "Address_Reference": {
-                        "ID": (
-                            [
-                                {
-                                    "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                    "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                                }
-                                for id_elem in address_data_elem.find(
-                                    "{urn:com.workday/bsvc}Address_Reference", namespaces
-                                ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                            ]
-                            if address_data_elem.find("{urn:com.workday/bsvc}Address_Reference", namespaces) is not None
-                            else []
-                        )
-                    },
-                    "Country_Reference": {
-                        "ID": (
-                            [
-                                {
-                                    "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                    "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                                }
-                                for id_elem in address_data_elem.find(
-                                    "{urn:com.workday/bsvc}Country_Reference", namespaces
-                                ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                            ]
-                            if address_data_elem.find("{urn:com.workday/bsvc}Country_Reference", namespaces) is not None
-                            else []
-                        )
-                    },
-                    "Country_Region_Reference": {
-                        "ID": (
-                            [
-                                {
-                                    "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                    "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                                }
-                                for id_elem in address_data_elem.find(
-                                    "{urn:com.workday/bsvc}Country_Region_Reference", namespaces
-                                ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                            ]
-                            if address_data_elem.find("{urn:com.workday/bsvc}Country_Region_Reference", namespaces)
-                            is not None
-                            else []
-                        )
-                    },
-                    "Country_Region_Descriptor": self.safe_find_text(
-                        address_data_elem, "{urn:com.workday/bsvc}Country_Region_Descriptor", namespaces
-                    ),
-                    "Last_Modified": self.safe_find_text(
-                        address_data_elem, "{urn:com.workday/bsvc}Last_Modified", namespaces
-                    ),
-                    "Municipality": self.safe_find_text(
-                        address_data_elem, "{urn:com.workday/bsvc}Municipality", namespaces
-                    ),
-                    "Number_of_Days": self.safe_find_text(
-                        address_data_elem, "{urn:com.workday/bsvc}Number_of_Days", namespaces
-                    ),
-                    "Postal_Code": self.safe_find_text(
-                        address_data_elem, "{urn:com.workday/bsvc}Postal_Code", namespaces
-                    ),
-                    "Usage_Data": {
-                        "-Public": address_data_elem.find("{urn:com.workday/bsvc}Usage_Data", namespaces).attrib.get(
-                            "{urn:com.workday/bsvc}Public"
-                        ),
-                        "Type_Data": {
-                            "-Primary": address_data_elem.find(
-                                "{urn:com.workday/bsvc}Usage_Data/{urn:com.workday/bsvc}Type_Data", namespaces
-                            ).attrib.get("{urn:com.workday/bsvc}Primary"),
-                            "Type_Reference": {
-                                "ID": (
-                                    [
-                                        {
-                                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                                        }
-                                        for id_elem in address_data_elem.find(
-                                            "{urn:com.workday/bsvc}Usage_Data/{urn:com.workday/bsvc}Type_Data/{urn:com.workday/bsvc}Type_Reference",
-                                            namespaces,
-                                        ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                                    ]
-                                    if address_data_elem.find(
-                                        "{urn:com.workday/bsvc}Usage_Data/{urn:com.workday/bsvc}Type_Data/{urn:com.workday/bsvc}Type_Reference",
-                                        namespaces,
-                                    )
-                                    is not None
-                                    else []
-                                )
-                            },
-                        },
-                    },
-                }
-                if address_data_elem is not None
-                else None
-            )
-
-            contact_data = {"Address_Data": address_data}
-
-            location_data = {
-                "Location_ID": self.safe_find_text(location_data_elem, "{urn:com.workday/bsvc}Location_ID", namespaces),
-                "Location_Name": self.safe_find_text(
-                    location_data_elem, "{urn:com.workday/bsvc}Location_Name", namespaces
-                ),
-                "Location_Usage_Reference": location_usage_reference,
-                "Location_Type_Reference": location_type_reference,
-                "Location_Hierarchy_Reference": location_hierarchy_reference,
-                "Integration_ID_Data": integration_id_data,
-                "Inactive": self.safe_find_text(location_data_elem, "{urn:com.workday/bsvc}Inactive", namespaces),
-                "Latitude": self.safe_find_text(location_data_elem, "{urn:com.workday/bsvc}Latitude", namespaces),
-                "Longitude": self.safe_find_text(location_data_elem, "{urn:com.workday/bsvc}Longitude", namespaces),
-                "Altitude": self.safe_find_text(location_data_elem, "{urn:com.workday/bsvc}Altitude", namespaces),
-                "Time_Profile_Reference": time_profile_reference,
-                "Locale_Reference": locale_reference,
-                "Time_Zone_Reference": time_zone_reference,
-                "Default_Currency_Reference": default_currency_reference,
-                "Contact_Data": contact_data,
-            }
-
-            locations.append({"Location_Reference": location_reference, "Location_Data": location_data})
+            if location_data is not None:
+                locations.append(location_data)
 
         return locations
 
@@ -1196,331 +462,17 @@ class WorkdayRequest:
             return job_profiles
 
         for job_profile in response_data.findall("{urn:com.workday/bsvc}Job_Profile", namespaces):
-            job_profile_reference_elem = job_profile.find("{urn:com.workday/bsvc}Job_Profile_Reference", namespaces)
-            job_profile_data_elem = job_profile.find("{urn:com.workday/bsvc}Job_Profile_Data", namespaces)
+            # Parse XML data into JSON
+            xml_input = ET.tostring(job_profile)
+            o = xmltodict.parse(xml_input=xml_input)
+            
+            # Remove namespace prefix from keys
+            cleaned_json_string = self.clean_json_string(json.dumps(o))
+            json_data = json.loads(cleaned_json_string)
+            job_profile_data = json_data.get("Job_Profile")
 
-            job_profile_reference = {
-                "ID": (
-                    [
-                        {
-                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                        }
-                        for id_elem in job_profile_reference_elem.findall("{urn:com.workday/bsvc}ID", namespaces)
-                    ]
-                    if job_profile_reference_elem is not None
-                    else []
-                )
-            }
-
-            job_profile_basic_data_elem = (
-                job_profile_data_elem.find("{urn:com.workday/bsvc}Job_Profile_Basic_Data", namespaces)
-                if job_profile_data_elem is not None
-                else None
-            )
-            job_profile_pay_rate_data_elem = (
-                job_profile_data_elem.find("{urn:com.workday/bsvc}Job_Profile_Pay_Rate_Data", namespaces)
-                if job_profile_data_elem is not None
-                else None
-            )
-            job_profile_exempt_data_elem = (
-                job_profile_data_elem.find("{urn:com.workday/bsvc}Job_Profile_Exempt_Data", namespaces)
-                if job_profile_data_elem is not None
-                else None
-            )
-            job_profile_compensation_data_elem = (
-                job_profile_data_elem.find("{urn:com.workday/bsvc}Job_Profile_Compensation_Data", namespaces)
-                if job_profile_data_elem is not None
-                else None
-            )
-            job_classification_data_elems = (
-                job_profile_data_elem.findall("{urn:com.workday/bsvc}Job_Classification_Data", namespaces)
-                if job_profile_data_elem is not None
-                else []
-            )
-            workers_compensation_code_replacement_data_elem = (
-                job_profile_data_elem.find(
-                    "{urn:com.workday/bsvc}Workers_Compensation_Code_Replacement_Data", namespaces
-                )
-                if job_profile_data_elem is not None
-                else None
-            )
-
-            job_profile_basic_data = {}
-
-            if job_profile_basic_data_elem is not None:
-                job_profile_basic_data["Job_Title"] = self.safe_find_text(
-                    job_profile_basic_data_elem, "{urn:com.workday/bsvc}Job_Title", namespaces
-                )
-                job_profile_basic_data["Inactive"] = self.safe_find_text(
-                    job_profile_basic_data_elem, "{urn:com.workday/bsvc}Inactive", namespaces
-                )
-                job_profile_basic_data["Include_Job_Code_in_Name"] = self.safe_find_text(
-                    job_profile_basic_data_elem, "{urn:com.workday/bsvc}Include_Job_Code_in_Name", namespaces
-                )
-                job_profile_basic_data["Work_Shift_Required"] = self.safe_find_text(
-                    job_profile_basic_data_elem, "{urn:com.workday/bsvc}Work_Shift_Required", namespaces
-                )
-                job_profile_basic_data["Public_Job"] = self.safe_find_text(
-                    job_profile_basic_data_elem, "{urn:com.workday/bsvc}Public_Job", namespaces
-                )
-                job_profile_basic_data["Critical_Job"] = self.safe_find_text(
-                    job_profile_basic_data_elem, "{urn:com.workday/bsvc}Critical_Job", namespaces
-                )
-
-                job_family_data_elem = job_profile_basic_data_elem.find(
-                    "{urn:com.workday/bsvc}Job_Family_Data", namespaces
-                )
-                job_family_data = (
-                    {
-                        "Job_Family_Reference": {
-                            "ID": (
-                                [
-                                    {
-                                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                                    }
-                                    for id_elem in job_family_data_elem.find(
-                                        "{urn:com.workday/bsvc}Job_Family_Reference", namespaces
-                                    ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                                ]
-                                if job_family_data_elem.find("{urn:com.workday/bsvc}Job_Family_Reference", namespaces)
-                                is not None
-                                else []
-                            )
-                        }
-                    }
-                    if job_family_data_elem is not None
-                    else None
-                )
-
-                job_level_reference = {
-                    "ID": (
-                        [
-                            {
-                                "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                            }
-                            for id_elem in job_profile_basic_data_elem.find(
-                                "{urn:com.workday/bsvc}Job_Level_Reference", namespaces
-                            ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                        ]
-                        if job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Job_Level_Reference", namespaces)
-                        is not None
-                        else []
-                    )
-                }
-
-                management_level_reference = {
-                    "ID": (
-                        [
-                            {
-                                "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                            }
-                            for id_elem in job_profile_basic_data_elem.find(
-                                "{urn:com.workday/bsvc}Management_Level_Reference", namespaces
-                            ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                        ]
-                        if job_profile_basic_data_elem.find(
-                            "{urn:com.workday/bsvc}Management_Level_Reference", namespaces
-                        )
-                        is not None
-                        else []
-                    )
-                }
-
-                referral_payment_plan_reference = {
-                    "ID": (
-                        [
-                            {
-                                "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                            }
-                            for id_elem in job_profile_basic_data_elem.find(
-                                "{urn:com.workday/bsvc}Referral_Payment_Plan_Reference", namespaces
-                            ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                        ]
-                        if job_profile_basic_data_elem.find(
-                            "{urn:com.workday/bsvc}Referral_Payment_Plan_Reference", namespaces
-                        )
-                        is not None
-                        else []
-                    )
-                }
-
-                job_profile_basic_data["Job_Family_Data"] = job_family_data
-                job_profile_basic_data["Job_Level_Reference"] = job_level_reference
-                job_profile_basic_data["Management_Level_Reference"] = management_level_reference
-                job_profile_basic_data["Referral_Payment_Plan_Reference"] = referral_payment_plan_reference
-
-                job_description = job_profile_basic_data_elem.find("{urn:com.workday/bsvc}Job_Description", namespaces)
-                if job_description is not None:
-                    job_profile_basic_data["Job_Description"] = job_description.text
-
-            job_profile_pay_rate_data = (
-                {
-                    "Country_Reference": {
-                        "ID": (
-                            [
-                                {
-                                    "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                    "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                                }
-                                for id_elem in job_profile_pay_rate_data_elem.find(
-                                    "{urn:com.workday/bsvc}Country_Reference", namespaces
-                                ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                            ]
-                            if job_profile_pay_rate_data_elem is not None
-                            and job_profile_pay_rate_data_elem.find(
-                                "{urn:com.workday/bsvc}Country_Reference", namespaces
-                            )
-                            is not None
-                            else []
-                        )
-                    },
-                    "Pay_Rate_Type_Reference": {
-                        "ID": (
-                            [
-                                {
-                                    "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                    "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                                }
-                                for id_elem in job_profile_pay_rate_data_elem.find(
-                                    "{urn:com.workday/bsvc}Pay_Rate_Type_Reference", namespaces
-                                ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                            ]
-                            if job_profile_pay_rate_data_elem is not None
-                            and job_profile_pay_rate_data_elem.find(
-                                "{urn:com.workday/bsvc}Pay_Rate_Type_Reference", namespaces
-                            )
-                            is not None
-                            else []
-                        )
-                    },
-                }
-                if job_profile_pay_rate_data_elem is not None
-                else None
-            )
-
-            workers_compensation_code_replacement_data = (
-                {
-                    "Workers_Compensation_Code_Reference": {
-                        "ID": (
-                            [
-                                {
-                                    "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                    "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                                }
-                                for id_elem in workers_compensation_code_replacement_data_elem.find(
-                                    "{urn:com.workday/bsvc}Workers_Compensation_Code_Reference", namespaces
-                                ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                            ]
-                            if workers_compensation_code_replacement_data_elem.find(
-                                "{urn:com.workday/bsvc}Workers_Compensation_Code_Reference", namespaces
-                            )
-                            is not None
-                            else []
-                        )
-                    }
-                }
-                if workers_compensation_code_replacement_data_elem is not None
-                else None
-            )
-
-            job_profile_exempt_data = (
-                {
-                    "Location_Context_Reference": {
-                        "ID": (
-                            [
-                                {
-                                    "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                    "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                                }
-                                for id_elem in job_profile_exempt_data_elem.find(
-                                    "{urn:com.workday/bsvc}Location_Context_Reference", namespaces
-                                ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                            ]
-                            if job_profile_exempt_data_elem is not None
-                            and job_profile_exempt_data_elem.find(
-                                "{urn:com.workday/bsvc}Location_Context_Reference", namespaces
-                            )
-                            is not None
-                            else []
-                        )
-                    },
-                    "Job_Exempt": self.safe_find_text(
-                        job_profile_exempt_data_elem, "{urn:com.workday/bsvc}Job_Exempt", namespaces
-                    ),
-                }
-                if job_profile_exempt_data_elem is not None
-                else None
-            )
-
-            job_profile_compensation_data = (
-                {
-                    "Compensation_Grade_Reference": {
-                        "ID": (
-                            [
-                                {
-                                    "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                    "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                                }
-                                for id_elem in job_profile_compensation_data_elem.find(
-                                    "{urn:com.workday/bsvc}Compensation_Grade_Reference", namespaces
-                                ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                            ]
-                            if job_profile_compensation_data_elem is not None
-                            and job_profile_compensation_data_elem.find(
-                                "{urn:com.workday/bsvc}Compensation_Grade_Reference", namespaces
-                            )
-                            is not None
-                            else []
-                        )
-                    }
-                }
-                if job_profile_compensation_data_elem is not None
-                else None
-            )
-
-            job_classifications_data = [
-                {
-                    "Job_Classifications_Reference": {
-                        "ID": (
-                            [
-                                {
-                                    "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                    "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                                }
-                                for id_elem in job_classification_data_elem.find(
-                                    "{urn:com.workday/bsvc}Job_Classifications_Reference", namespaces
-                                ).findall("{urn:com.workday/bsvc}ID", namespaces)
-                            ]
-                            if job_classification_data_elem.find(
-                                "{urn:com.workday/bsvc}Job_Classifications_Reference", namespaces
-                            )
-                            is not None
-                            else []
-                        )
-                    }
-                }
-                for job_classification_data_elem in job_classification_data_elems
-            ]
-
-            job_profile_data = {
-                "Job_Code": self.safe_find_text(job_profile_data_elem, "{urn:com.workday/bsvc}Job_Code", namespaces),
-                "Effective_Date": self.safe_find_text(
-                    job_profile_data_elem, "{urn:com.workday/bsvc}Effective_Date", namespaces
-                ),
-                "Job_Profile_Basic_Data": job_profile_basic_data,
-                "Job_Profile_Pay_Rate_Data": job_profile_pay_rate_data,
-                "Workers_Compensation_Code_Replacement_Data": workers_compensation_code_replacement_data,
-                "Job_Profile_Exempt_Data": job_profile_exempt_data,
-                "Job_Profile_Compensation_Data": job_profile_compensation_data,
-                "Job_Classification_Data": job_classifications_data,
-            }
-
-            job_profiles.append({"Job_Profile_Reference": job_profile_reference, "Job_Profile_Data": job_profile_data})
+            if job_profile_data is not None:
+                job_profiles.append(job_profile_data)
 
         return job_profiles
 
@@ -1534,97 +486,17 @@ class WorkdayRequest:
             return positions
 
         for position in response_data.findall("{urn:com.workday/bsvc}Position", namespaces):
-            position_reference_elem = position.find("{urn:com.workday/bsvc}Position_Reference", namespaces)
-            position_data_elem = position.find("{urn:com.workday/bsvc}Position_Data", namespaces)
-
-            position_reference = (
-                {
-                    "ID": [
-                        {
-                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                        }
-                        for id_elem in position_reference_elem.findall("{urn:com.workday/bsvc}ID", namespaces)
-                    ]
-                }
-                if position_reference_elem is not None
-                else None
-            )
-
-            position_definition_data_elem = (
-                position_data_elem.find("{urn:com.workday/bsvc}Position_Definition_Data", namespaces)
-                if position_data_elem is not None
-                else None
-            )
-
-            position_definition_data = {
-                "Position_ID": self.safe_find_text(
-                    position_definition_data_elem, "{urn:com.workday/bsvc}Position_ID", namespaces
-                ),
-                "Job_Posting_Title": self.safe_find_text(
-                    position_definition_data_elem, "{urn:com.workday/bsvc}Job_Posting_Title", namespaces
-                ),
-                "Academic_Tenure_Eligible": self.safe_find_text(
-                    position_definition_data_elem, "{urn:com.workday/bsvc}Academic_Tenure_Eligible", namespaces
-                ),
-                "Available_For_Hire": self.safe_find_text(
-                    position_definition_data_elem, "{urn:com.workday/bsvc}Available_For_Hire", namespaces
-                ),
-                "Available_for_Recruiting": self.safe_find_text(
-                    position_definition_data_elem, "{urn:com.workday/bsvc}Available_for_Recruiting", namespaces
-                ),
-                "Hiring_Freeze": self.safe_find_text(
-                    position_definition_data_elem, "{urn:com.workday/bsvc}Hiring_Freeze", namespaces
-                ),
-                "Work_Shift_Required": self.safe_find_text(
-                    position_definition_data_elem, "{urn:com.workday/bsvc}Work_Shift_Required", namespaces
-                ),
-                "Available_for_Overlap": self.safe_find_text(
-                    position_definition_data_elem, "{urn:com.workday/bsvc}Available_for_Overlap", namespaces
-                ),
-                "Critical_Job": self.safe_find_text(
-                    position_definition_data_elem, "{urn:com.workday/bsvc}Critical_Job", namespaces
-                ),
-            }
-
-            position_status_reference = [
-                {
-                    "ID": {
-                        "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                        "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                    }
-                }
-                for id_elem in position_definition_data_elem.findall(
-                    "{urn:com.workday/bsvc}Position_Status_Reference/{urn:com.workday/bsvc}ID", namespaces
-                )
-            ]
-            position_definition_data["Position_Status_Reference"] = position_status_reference
-
-            position_data = {
-                "Supervisory_Organization_Reference": {
-                    "ID": (
-                        [
-                            {
-                                "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                                "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                            }
-                            for id_elem in position_data_elem.findall(
-                                "{urn:com.workday/bsvc}Supervisory_Organization_Reference/{urn:com.workday/bsvc}ID",
-                                namespaces,
-                            )
-                        ]
-                        if position_data_elem is not None
-                        else []
-                    )
-                },
-                "Effective_Date": self.safe_find_text(
-                    position_data_elem, "{urn:com.workday/bsvc}Effective_Date", namespaces
-                ),
-                "Position_Definition_Data": position_definition_data,
-                "Closed": self.safe_find_text(position_data_elem, "{urn:com.workday/bsvc}Closed", namespaces),
-            }
-
-            positions.append({"Position_Reference": position_reference, "Position_Data": position_data})
+            # Parse XML data into JSON
+            xml_input = ET.tostring(position)
+            o = xmltodict.parse(xml_input=xml_input)
+            
+            # Remove namespace prefix from keys
+            cleaned_json_string = self.clean_json_string(json.dumps(o))
+            json_data = json.loads(cleaned_json_string)
+            position_data = json_data.get("Position")
+            
+            if position_data is not None:
+                positions.append(position_data)
 
         return positions
 
@@ -1637,47 +509,18 @@ class WorkdayRequest:
         if response_data is None:
             return sexual_orientations
 
-        for orientation in response_data.findall("{urn:com.workday/bsvc}Sexual_Orientation", namespaces):
-            orientation_reference_elem = orientation.find(
-                "{urn:com.workday/bsvc}Sexual_Orientation_Reference", namespaces
-            )
-            orientation_data_elem = orientation.find("{urn:com.workday/bsvc}Sexual_Orientation_Data", namespaces)
+        for sexual_orientation in response_data.findall("{urn:com.workday/bsvc}Sexual_Orientation", namespaces):
+            # Parse XML data into JSON
+            xml_input = ET.tostring(sexual_orientation)
+            o = xmltodict.parse(xml_input=xml_input)
+            
+            # Remove namespace prefix from keys
+            cleaned_json_string = self.clean_json_string(json.dumps(o))
+            json_data = json.loads(cleaned_json_string)
+            sexual_orientation_data = json_data.get("Sexual_Orientation")
 
-            orientation_reference = (
-                {
-                    "ID": [
-                        {
-                            "#content": id_elem.text if id_elem is not None else "Unknown ID",
-                            "-type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                        }
-                        for id_elem in orientation_reference_elem.findall("{urn:com.workday/bsvc}ID", namespaces)
-                    ]
-                }
-                if orientation_reference_elem is not None
-                else None
-            )
-
-            orientation_data = {}
-            if orientation_data_elem is not None:
-                orientation_data["ID"] = self.safe_find_text(
-                    orientation_data_elem, "{urn:com.workday/bsvc}ID", namespaces
-                )
-                orientation_data["Sexual_Orientation_Name"] = self.safe_find_text(
-                    orientation_data_elem, "{urn:com.workday/bsvc}Sexual_Orientation_Name", namespaces
-                )
-                orientation_data["Sexual_Orientation_Code"] = self.safe_find_text(
-                    orientation_data_elem, "{urn:com.workday/bsvc}Sexual_Orientation_Code", namespaces
-                )
-                orientation_data["Sexual_Orientation_Description"] = self.safe_find_text(
-                    orientation_data_elem, "{urn:com.workday/bsvc}Sexual_Orientation_Description", namespaces
-                )
-                orientation_data["Sexual_Orientation_Inactive"] = self.safe_find_text(
-                    orientation_data_elem, "{urn:com.workday/bsvc}Sexual_Orientation_Inactive", namespaces
-                )
-
-            sexual_orientations.append(
-                {"Sexual_Orientation_Reference": orientation_reference, "Sexual_Orientation_Data": orientation_data}
-            )
+            if sexual_orientation_data is not None:
+                sexual_orientations.append(sexual_orientation_data)
 
         return sexual_orientations
 

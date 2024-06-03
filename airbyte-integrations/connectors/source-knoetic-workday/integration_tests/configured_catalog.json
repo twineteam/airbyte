@@ -24,6 +24,17 @@
     },
     {
       "stream": {
+        "name": "worker_details",
+        "json_schema": {},
+        "supported_sync_modes": [
+          "full_refresh"
+        ]
+      },
+      "sync_mode": "full_refresh",
+      "destination_sync_mode": "overwrite"
+    },
+    {
+      "stream": {
         "name": "worker_details_photo",
         "json_schema": {},
         "supported_sync_modes": [
