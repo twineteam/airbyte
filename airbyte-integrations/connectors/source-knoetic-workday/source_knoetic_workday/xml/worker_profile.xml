@@ -2,7 +2,7 @@
     <wd:Worker_Reference>
         <wd:Employee_Reference>
             <wd:Integration_ID_Reference wd:Descriptor="string">
-                <wd:ID wd:System_ID="WD-WID">PARENT_ID</wd:ID>
+                <wd:ID wd:System_ID="WD-WID">WORKER_ID</wd:ID>
             </wd:Integration_ID_Reference>
         </wd:Employee_Reference>
     </wd:Worker_Reference>

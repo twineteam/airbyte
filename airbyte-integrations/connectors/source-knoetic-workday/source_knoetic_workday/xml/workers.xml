@@ -2,6 +2,8 @@
     <wd:Response_Group>
         <!--Optional:-->
         <wd:Include_Reference>1</wd:Include_Reference>
+        <!--Optional:-->
+        <wd:Include_Employment_Information>1</wd:Include_Employment_Information>
     </wd:Response_Group>
     <wd:Response_Filter>
         <!-- Optional: -->

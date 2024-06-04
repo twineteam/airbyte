@@ -24,13 +24,18 @@ class WorkdayRequest:
                 "request_file": "workers.xml",
                 "parse_response": self.parse_workers_response,
             },
-            "worker_profile": {
-                "request_file": "worker_profile.xml",
-                "parse_response": self.parse_worker_profile_response,
-            },
+            # "worker_profile": {
+            #     "request_file": "worker_profile.xml",
+            #     "parse_response": self.parse_worker_profile_response,
+            # },
             "worker_details": {
                 "request_file": "worker_details.xml",
                 "parse_response": self.parse_worker_details_response,
+            },
+            "worker_details_history": {
+                "request_file": "worker_details_history.xml",
+                "parse_response": self.parse_worker_details_response, # Same as worker_details
+
             },
             "worker_details_photo": {
                 "request_file": "worker_details_photo.xml",
@@ -185,13 +190,33 @@ class WorkdayRequest:
         return json_string
     
     def construct_request_body(
-        self, file_name: str, tenant: str, username: str, password: str, page: int, per_page: int = 200
+        # self, file_name: str, tenant: str, username: str, password: str, page: int, per_page: int = 200
+        self, request_config: Dict[str, str]
     ) -> str:
+        # Required fields
+        file_name = request_config.get("file_name")
+        tenant = request_config.get("tenant")
+        username = request_config.get("username")
+        password = request_config.get("password")
+
+        # Optional fields
+        page = request_config.get("page")
+        per_page = request_config.get("per_page")
+        worker_id = request_config.get("worker_id")
+        as_of_effective_date = request_config.get("as_of_effective_date")
+        reference_subcategory_type = request_config.get("reference_subcategory_type")
+
         specific_xml_content: str = self.read_xml_file(file_name)
         if "PAGE_NUMBER" in specific_xml_content:
             specific_xml_content = specific_xml_content.replace("PAGE_NUMBER", str(page))
         if "PER_PAGE" in specific_xml_content:
             specific_xml_content = specific_xml_content.replace("PER_PAGE", str(per_page))
+        if "WORKER_ID" in specific_xml_content:
+            specific_xml_content = specific_xml_content.replace("WORKER_ID", worker_id)
+        if "AS_OF_EFFECTIVE_DATE" in specific_xml_content:
+            specific_xml_content = specific_xml_content.replace("EFFECTIVE_DATE", as_of_effective_date)
+        if "REFERENCE_SUBCATEGORY_TYPE" in specific_xml_content:
+            specific_xml_content = specific_xml_content.replace("REFERENCE_SUBCATEGORY_TYPE", reference_subcategory_type)
 
         header_content: str = self.header_template % (f"{username}@{tenant}", password)
         full_xml: str = self.base_template % (header_content, specific_xml_content)
@@ -224,58 +249,58 @@ class WorkdayRequest:
         self, response_data: ET.Element, namespaces: Dict[str, str]
     ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
 
-        workers = []
+        workers: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+        for worker in response_data.findall("{urn:com.workday/bsvc}Worker", namespaces):
+            # Parse XML data into JSON
+            xml_input = ET.tostring(worker)
+            o = xmltodict.parse(xml_input=xml_input)
+            
+            # Remove namespace prefix from keys
+            cleaned_json_string = self.clean_json_string(json.dumps(o))
+            json_data = json.loads(cleaned_json_string)
+            worker_data = json_data.get("Worker")
+            
+            if worker_data is not None:
+                original_hire_date = self.safe_find_text(worker, "{urn:com.workday/bsvc}Worker_Data/{urn:com.workday/bsvc}Employment_Data/{urn:com.workday/bsvc}Worker_Status_Data/{urn:com.workday/bsvc}Original_Hire_Date", namespaces)
+                hire_date = self.safe_find_text(worker, "{urn:com.workday/bsvc}Worker_Data/{urn:com.workday/bsvc}Employment_Data/{urn:com.workday/bsvc}Worker_Status_Data/{urn:com.workday/bsvc}Hire_Date", namespaces)
+                termination_date = self.safe_find_text(worker, "{urn:com.workday/bsvc}Worker_Data/{urn:com.workday/bsvc}Employment_Data/{urn:com.workday/bsvc}Worker_Status_Data/{urn:com.workday/bsvc}Termination_Date", namespaces)
 
-        for worker in response_data.findall(f"{self.xmlns}Worker", namespaces):
-            worker_descriptor_elem = worker.find(f"{self.xmlns}Worker_Descriptor", namespaces)
-            worker_descriptor = worker_descriptor_elem.text if worker_descriptor_elem is not None else None
+                worker_data["Original_Hire_Date"] = original_hire_date
+                worker_data["Hire_Date"] = hire_date
+                worker_data["Termination_Date"] = termination_date
 
-            worker_data: Dict[str, str | List[Dict[str, str]] | None] = {
-                "Worker_Descriptor": worker_descriptor,
-            }
-
-            worker_reference = []
-            for id_elem in worker.findall(
-                ".//{urn:com.workday/bsvc}Worker_Reference/{urn:com.workday/bsvc}ID", namespaces
-            ):
-                worker_reference.append(
-                    {
-                        "type": id_elem.attrib.get("{urn:com.workday/bsvc}type", "Unknown Type"),
-                        "value": id_elem.text if id_elem.text is not None else "Unknown ID",
-                    }
-                )
-
-            worker_data["Worker_Reference"] = worker_reference
-            workers.append(worker_data)
-
+                del worker_data["Worker_Data"]["Employment_Data"]
+                workers.append(worker_data)
+            
         return workers
 
-    def parse_worker_profile_response(self, response: requests.Response) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
-        if response.status_code != 200:
-            raise requests.exceptions.HTTPError(f"Request failed with status code {response.status_code}.")
+    # Commented out because we want to deprecate usage of worker_profile
+    # def parse_worker_profile_response(self, response: requests.Response) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+    #     if response.status_code != 200:
+    #         raise requests.exceptions.HTTPError(f"Request failed with status code {response.status_code}.")
 
-        xml_data = response.text
-        root = ET.fromstring(xml_data)
+    #     xml_data = response.text
+    #     root = ET.fromstring(xml_data)
 
-        namespaces = {"env": "http://schemas.xmlsoap.org/soap/envelope/", "wd": "urn:com.workday/bsvc"}
+    #     namespaces = {"env": "http://schemas.xmlsoap.org/soap/envelope/", "wd": "urn:com.workday/bsvc"}
 
-        worker_profile_elem = root.find(f".//wd:Worker_Profile", namespaces)
-        if worker_profile_elem is None:
-            return None
+    #     worker_profile_elem = root.find(f".//wd:Worker_Profile", namespaces)
+    #     if worker_profile_elem is None:
+    #         return None
         
-        # Parse XML data into JSON
-        xml_input = ET.tostring(worker_profile_elem)
-        o = xmltodict.parse(xml_input=xml_input)
+    #     # Parse XML data into JSON
+    #     xml_input = ET.tostring(worker_profile_elem)
+    #     o = xmltodict.parse(xml_input=xml_input)
         
-        # Remove namespace prefix from keys
-        cleaned_json_string = self.clean_json_string(json.dumps(o))
-        json_data = json.loads(cleaned_json_string)
-        worker_profile_data = json_data.get("Worker_Profile", {}).get("Worker_Profile_Data")
+    #     # Remove namespace prefix from keys
+    #     cleaned_json_string = self.clean_json_string(json.dumps(o))
+    #     json_data = json.loads(cleaned_json_string)
+    #     worker_profile_data = json_data.get("Worker_Profile", {}).get("Worker_Profile_Data")
         
-        if worker_profile_data is not None:
-            return [worker_profile_data]
+    #     if worker_profile_data is not None:
+    #         return [worker_profile_data]
         
-        return []
+    #     return []
 
     def parse_worker_details_response(self, response_data: ET.Element, namespaces: Dict[str, str]) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
         worker_details: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []

@@ -5,7 +5,7 @@
         <!-- 1 or more repetitions: -->
         <wd:Worker_Reference>
             <!-- Zero or more repetitions: -->
-            <wd:ID wd:type="WID">PARENT_ID</wd:ID>
+            <wd:ID wd:type="WID">WORKER_ID</wd:ID>
         </wd:Worker_Reference>
     </wd:Request_References>
     <!-- Optional: -->
