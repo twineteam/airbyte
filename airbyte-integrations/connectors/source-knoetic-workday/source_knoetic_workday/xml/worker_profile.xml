@@ -1,9 +1,0 @@
-<wd:Worker_Profile_Get xmlns:wd="urn:com.workday/bsvc" wd:version="v37.2">
-    <wd:Worker_Reference>
-        <wd:Employee_Reference>
-            <wd:Integration_ID_Reference wd:Descriptor="string">
-                <wd:ID wd:System_ID="WD-WID">WORKER_ID</wd:ID>
-            </wd:Integration_ID_Reference>
-        </wd:Employee_Reference>
-    </wd:Worker_Reference>
-</wd:Worker_Profile_Get>

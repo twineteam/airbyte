@@ -24,10 +24,6 @@ class WorkdayRequest:
                 "request_file": "workers.xml",
                 "parse_response": self.parse_workers_response,
             },
-            # "worker_profile": {
-            #     "request_file": "worker_profile.xml",
-            #     "parse_response": self.parse_worker_profile_response,
-            # },
             "worker_details": {
                 "request_file": "worker_details.xml",
                 "parse_response": self.parse_worker_details_response,
@@ -273,34 +269,6 @@ class WorkdayRequest:
                 workers.append(worker_data)
             
         return workers
-
-    # Commented out because we want to deprecate usage of worker_profile
-    # def parse_worker_profile_response(self, response: requests.Response) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
-    #     if response.status_code != 200:
-    #         raise requests.exceptions.HTTPError(f"Request failed with status code {response.status_code}.")
-
-    #     xml_data = response.text
-    #     root = ET.fromstring(xml_data)
-
-    #     namespaces = {"env": "http://schemas.xmlsoap.org/soap/envelope/", "wd": "urn:com.workday/bsvc"}
-
-    #     worker_profile_elem = root.find(f".//wd:Worker_Profile", namespaces)
-    #     if worker_profile_elem is None:
-    #         return None
-        
-    #     # Parse XML data into JSON
-    #     xml_input = ET.tostring(worker_profile_elem)
-    #     o = xmltodict.parse(xml_input=xml_input)
-        
-    #     # Remove namespace prefix from keys
-    #     cleaned_json_string = self.clean_json_string(json.dumps(o))
-    #     json_data = json.loads(cleaned_json_string)
-    #     worker_profile_data = json_data.get("Worker_Profile", {}).get("Worker_Profile_Data")
-        
-    #     if worker_profile_data is not None:
-    #         return [worker_profile_data]
-        
-    #     return []
 
     def parse_worker_details_response(self, response_data: ET.Element, namespaces: Dict[str, str]) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
         worker_details: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []

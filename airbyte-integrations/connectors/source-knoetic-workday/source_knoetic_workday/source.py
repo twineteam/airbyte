@@ -32,7 +32,6 @@ class KnoeticWorkdayStream(HttpStream, ABC):
     - `class KnoeticWorkdayStream(HttpStream, ABC)` which is the current class
     - `class IncrementalKnoeticWorkdayStream(KnoeticWorkdayStream, ABC)` contains behavior to pull data incrementally for workers using `Human_Resources/37.2`
     - `class Workers(KnoeticWorkdayStream)` contains behavior to pull data for workers using `Human_Resources/37.2`
-    - `class WorkerProfile(KnoeticWorkdayStream)` contains behavior to pull data for worker profiles using `Human_Resources/37.2` - DEPRECATING
     - `class WorkerDetails(KnoeticWorkdayStream)` contains behavior to pull data for worker details using `Human_Resources/37.2`
     - `class WorkerDetailsHistory(IncrementalKnoeticWorkdayStream)` contains behavior to pull data for worker details history using `Human_Resources/37.2`
     - `class WorkerDetailsPhoto(KnoeticWorkdayStream)` contains behavior to pull data for worker details photo using `Human_Resources/37.2`
@@ -232,70 +231,6 @@ class Workers(KnoeticWorkdayStream):
         parsed_response = self.workday_request.parse_response(response, stream_name="workers")
 
         yield from parsed_response
-
-
-# class WorkerProfile(KnoeticWorkdayStream):
-#     primary_key = None
-
-#     def __init__(
-#         self,
-#         *,
-#         tenant: str,
-#         url: str,
-#         username: str,
-#         password: str,
-#         workday_request: WorkdayRequest,
-#         page: int = 1,
-#         per_page: int = 200,
-#         worker_ids: List[str],
-#     ):
-
-#         super().__init__(
-#             tenant=tenant,
-#             url=url,
-#             username=username,
-#             password=password,
-#             workday_request=workday_request,
-#             page=page,
-#             per_page=per_page,
-#         )
-#         self.worker_ids = worker_ids
-#         self.current_worker_id = None
-
-#     def request_body_data(
-#         self,
-#         stream_state: Mapping[str, Any] | None,
-#         stream_slice: Mapping[str, Any] | None = None,
-#         next_page_token: Mapping[str, Any] | None = None,
-#     ) -> Mapping[str, Any] | str | None:
-#         self.current_worker_id = stream_slice.get("worker_id")
-
-#         request_config = {
-#             "file_name": "worker_profile.xml",
-#             "tenant": self.tenant,
-#             "username": self.username,
-#             "password": self.password,
-#             "page": self.page,
-#             "per_page": self.per_page,
-#             "worker_id": self.current_worker_id,
-#         }
-#         return self.workday_request.construct_request_body(request_config)
-
-#     def parse_response(
-#         self,
-#         response: requests.Response,
-#         *,
-#         stream_state: Mapping[str, Any],
-#         stream_slice: Mapping[str, Any] | None = None,
-#         next_page_token: Mapping[str, Any] | None = None,
-#     ) -> Iterable[Mapping[str, Any]]:
-
-#         parsed_response = self.workday_request.parse_response(response, stream_name="worker_profile")
-#         for record in parsed_response:
-#             yield record
-    
-#     def stream_slices(self, **kwargs) -> Iterable[Optional[Mapping[str, Any]]]:
-#         return [{"worker_id": worker_id} for worker_id in self.worker_ids]
 
 
 class WorkerDetails(KnoeticWorkdayStream):
@@ -1183,16 +1118,6 @@ class SourceKnoeticWorkday(AbstractSource):
         workers_data = self.get_worker_info_for_substreams(workers_stream)
         worker_ids = [worker.get("Worker_ID") for worker in workers_data]
 
-        # worker_profile_stream = WorkerProfile(
-        #     tenant=tenant,
-        #     url=url,
-        #     username=username,
-        #     password=password,
-        #     per_page=per_page,
-        #     workday_request=WorkdayRequest(),
-        #     worker_ids=worker_ids,
-        # )
-
         worker_details_stream = WorkerDetails(
             tenant=tenant,
             url=url,
@@ -1225,7 +1150,6 @@ class SourceKnoeticWorkday(AbstractSource):
 
         return [
             workers_stream,
-            # worker_profile_stream,
             worker_details_stream,
             worker_details_history_stream,
             worker_details_photo_stream,
