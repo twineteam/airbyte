@@ -210,7 +210,7 @@ class WorkdayRequest:
         if "WORKER_ID" in specific_xml_content:
             specific_xml_content = specific_xml_content.replace("WORKER_ID", worker_id)
         if "AS_OF_EFFECTIVE_DATE" in specific_xml_content:
-            specific_xml_content = specific_xml_content.replace("EFFECTIVE_DATE", as_of_effective_date)
+            specific_xml_content = specific_xml_content.replace("AS_OF_EFFECTIVE_DATE", as_of_effective_date)
         if "REFERENCE_SUBCATEGORY_TYPE" in specific_xml_content:
             specific_xml_content = specific_xml_content.replace("REFERENCE_SUBCATEGORY_TYPE", reference_subcategory_type)
 
