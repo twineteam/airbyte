@@ -112,7 +112,7 @@ class WorkdayRequest:
         return {"wd": list(namespaces.keys())[0]}
 
     @staticmethod
-    def safe_find_text(element: ET.Element | None, tag: str, namespaces: Dict[str, str]) -> str | None:
+    def safe_find_text(element: ET.Element, tag: str, namespaces: Dict[str, str]) -> str:
         """
         Safely finds and returns the text content of an XML element.
 
