@@ -16,9 +16,6 @@ from .utils.requests import WorkdayRequest
 logger = logging.getLogger(__name__)
 
 
-_INCOMING_DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
-
-
 class KnoeticWorkdayStream(HttpStream, ABC):
     """
     Each stream should extend this class (or another abstract subclass of it) to specify behavior unique to that stream.
@@ -30,17 +27,26 @@ class KnoeticWorkdayStream(HttpStream, ABC):
 
     then you should have these classes:
     - `class KnoeticWorkdayStream(HttpStream, ABC)` which is the current class
-    - `class IncrementalKnoeticWorkdayStream(KnoeticWorkdayStream, ABC)` contains behavior to pull data incrementally for workers using `Human_Resources/37.2`
+    - `class IncrementalKnoeticWorkdayStream(KnoeticWorkdayStream, ABC)` contains behavior to pull
+    data incrementally for workers using `Human_Resources/37.2`
     - `class Workers(KnoeticWorkdayStream)` contains behavior to pull data for workers using `Human_Resources/37.2`
-    - `class WorkerDetails(KnoeticWorkdayStream)` contains behavior to pull data for worker details using `Human_Resources/37.2`
-    - `class WorkerDetailsHistory(IncrementalKnoeticWorkdayStream)` contains behavior to pull data for worker details history using `Human_Resources/37.2`
-    - `class WorkerDetailsPhoto(KnoeticWorkdayStream)` contains behavior to pull data for worker details photo using `Human_Resources/37.2`
-    - `class OrganizationHierarchies(KnoeticWorkdayStream)` contains behavior to pull data for organization hierarchies using `Human_Resources/37.2`
-    - `class Ethnicities(KnoeticWorkdayStream)` contains behavior to pull data for ethnicities using `Human_Resources/37.2`
-    - `class GenderIdentities(KnoeticWorkdayStream)` contains behavior to pull data for gender identities using `Human_Resources/37.2`
+    - `class WorkerDetails(KnoeticWorkdayStream)` contains behavior to pull data for worker details
+    using `Human_Resources/37.2`
+    - `class WorkerDetailsHistory(IncrementalKnoeticWorkdayStream)` contains behavior to pull data
+    for worker details history using `Human_Resources/37.2`
+    - `class WorkerDetailsPhoto(KnoeticWorkdayStream)` contains behavior to pull data for worker
+    details photo using `Human_Resources/37.2`
+    - `class OrganizationHierarchies(KnoeticWorkdayStream)` contains behavior to pull data for organization
+    hierarchies using `Human_Resources/37.2`
+    - `class Ethnicities(KnoeticWorkdayStream)` contains behavior to pull data for ethnicities using
+    `Human_Resources/37.2`
+    - `class GenderIdentities(KnoeticWorkdayStream)` contains behavior to pull data for gender
+    identities using `Human_Resources/37.2`
     - `class Locations(KnoeticWorkdayStream)` contains behavior to pull data for locations using `Human_Resources/37.2`
-    - `class JobProfiles(KnoeticWorkdayStream)` contains behavior to pull data for job profiles using `Human_Resources/37.2`
-    - `class SexualOrientations(KnoeticWorkdayStream)` contains behavior to pull data for sexual orientations using `Human_Resources/37.2`
+    - `class JobProfiles(KnoeticWorkdayStream)` contains behavior to pull data for job profiles
+    using `Human_Resources/37.2`
+    - `class SexualOrientations(KnoeticWorkdayStream)` contains behavior to pull data for sexual
+    orientations using `Human_Resources/37.2`
 
     if the API contains the endpoints
         - POST Staffing/37.2
@@ -52,7 +58,8 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         - POST Integrations/37.2
 
     then you should have these classes:
-    - `class References(KnoeticWorkdayStream)` contains behavior to pull data for reference types using `Integrations/37.2`
+    - `class References(KnoeticWorkdayStream)` contains behavior to pull data for reference types
+    using `Integrations/37.2`
 
     if the API contains the endpoints
         - GET customreport2
@@ -68,28 +75,24 @@ class KnoeticWorkdayStream(HttpStream, ABC):
 
     def __init__(
         self,
-        *,
-        tenant: str,
-        url: str,
-        username: str,
-        password: str,
+        config: Mapping[str, Any],
         workday_request: WorkdayRequest,
-        page: int = 1,
-        per_page: int = 200,
+        file_name: str | None,
+        stream_name: str | None,
         api_budget: APIBudget | None = None,
-        web_service: str = "Human_Resources",
     ):
         super().__init__(api_budget)
-        self.api_version = "37.2"
-        self.web_service = web_service
-        self._cursor_field = "Last_Modified"
-        self.tenant = tenant
-        self.url = url
-        self.username = username
-        self.password = password
+        self.api_version = config["api_version"]
+        self.web_service = config["web_service"]
+        self.tenant = config["tenant"]
+        self.url = config["url"]
+        self.username = config["username"]
+        self.password = config["password"]
         self.workday_request = workday_request
-        self.page = page
-        self.per_page = per_page
+        self.per_page = config["per_page"]
+        self.page = 1
+        self.file_name = file_name
+        self.stream_name = stream_name
 
     @property
     def http_method(self) -> str:
@@ -136,9 +139,33 @@ class KnoeticWorkdayStream(HttpStream, ABC):
             if current_page < total_pages:
                 next_page = current_page + 1
                 return {"page": next_page}
-        
-        # No need for a next page token if there is only one page
+
         return None
+
+    def request_body_data(
+        self,
+        stream_state: Mapping[str, Any] | None,
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None,
+        **kwargs,
+    ) -> str:
+        """
+        Override to define the request body data for the request.
+        """
+
+        page = next_page_token["page"] if next_page_token else 1
+
+        request_config = {
+            "file_name": self.file_name,
+            "tenant": self.tenant,
+            "username": self.username,
+            "password": self.password,
+            "per_page": self.per_page,
+            "page": page,
+            **kwargs,
+        }
+
+        return self.workday_request.construct_request_body(**request_config)
 
     def path(
         self,
@@ -149,21 +176,18 @@ class KnoeticWorkdayStream(HttpStream, ABC):
     ) -> str:
         return f"{self.tenant}/{self.web_service}/{self.api_version}"
 
+    def parse_response(
+        self,
+        response: requests.Response,
+        *,
+        stream_state: Mapping[str, Any],
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None,
+    ) -> Iterable[Mapping[str, Any]]:
 
-class IncrementalKnoeticWorkdayStream(KnoeticWorkdayStream, ABC):
-    """
-    This class implements an incremental Workday stream based on an effective
-    date as the cursor field. It is used primarily for initial full sync and
-    incremental syncs thereafter.
-    """
-    state_checkpoint_interval = None
+        parsed_response = self.workday_request.parse_response(response, stream_name=self.stream_name)
 
-    def get_updated_state(self, current_stream_state: MutableMapping[str, Any], latest_record: Mapping[str, Any]) -> Mapping[str, Any]:
-        state_value = max(
-            current_stream_state.get(self.cursor_field, ""),
-            latest_record.get(self.cursor_field, "")
-        )
-        return {self.cursor_field: state_value}
+        yield from parsed_response
 
 
 class Workers(KnoeticWorkdayStream):
@@ -174,63 +198,14 @@ class Workers(KnoeticWorkdayStream):
 
     primary_key = None
 
-    def __init__(
-        self,
-        tenant: str,
-        url: str,
-        username: str,
-        password: str,
-        workday_request: WorkdayRequest,
-        page: int = 1,
-        per_page: int = 200,
-        api_budget: APIBudget | None = None,
-    ):
+    def __init__(self, config: Mapping[str, Any], workday_request: WorkdayRequest, api_budget: APIBudget | None = None):
         super().__init__(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
+            config=config,
             workday_request=workday_request,
-            page=page,
-            per_page=per_page,
             api_budget=api_budget,
+            file_name="workers.xml",
+            stream_name="workers",
         )
-
-    def request_body_data(
-        self,
-        stream_state: Mapping[str, Any] | None,
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> str:
-        """
-        Override to define the request body data for the request.
-        """
-
-        if next_page_token:
-            self.page = next_page_token["page"]
-        
-        request_config = {
-            "file_name": "workers.xml",
-            "tenant": self.tenant,
-            "username": self.username,
-            "password": self.password,
-            "page": self.page,
-            "per_page": self.per_page,
-        }
-        return self.workday_request.construct_request_body(request_config)
-
-    def parse_response(
-        self,
-        response: requests.Response,
-        *,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> Iterable[Mapping[str, Any]]:
-
-        parsed_response = self.workday_request.parse_response(response, stream_name="workers")
-
-        yield from parsed_response
 
 
 class WorkerDetails(KnoeticWorkdayStream):
@@ -238,113 +213,78 @@ class WorkerDetails(KnoeticWorkdayStream):
 
     def __init__(
         self,
-        *,
-        tenant: str,
-        url: str,
-        username: str,
-        password: str,
+        config: Mapping[str, Any],
         workday_request: WorkdayRequest,
-        page: int = 1,
-        per_page: int = 200,
         worker_ids: List[str],
+        api_budget: APIBudget | None = None,
     ):
-
         super().__init__(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
+            config=config,
             workday_request=workday_request,
-            page=page,
-            per_page=per_page,
+            api_budget=api_budget,
+            file_name="worker_details.xml",
+            stream_name="worker_details",
         )
         self.worker_ids = worker_ids
-        self.current_worker_id = None
 
     def request_body_data(
         self,
         stream_state: Mapping[str, Any] | None,
         stream_slice: Mapping[str, Any] | None = None,
         next_page_token: Mapping[str, Any] | None = None,
-    ) -> Mapping[str, Any] | str | None:
-        self.current_worker_id = stream_slice.get("worker_id")
+        **kwargs,
+    ) -> str:
+        if stream_slice:
+            self.current_worker_id = stream_slice["worker_id"]
 
-        request_config = {
-            "file_name": "worker_details.xml",
-            "tenant": self.tenant,
-            "username": self.username,
-            "password": self.password,
-            "page": self.page,
-            "per_page": self.per_page,
-            "worker_id": self.current_worker_id,
-        }
-        return self.workday_request.construct_request_body(request_config)
+        return super().request_body_data(
+            stream_state, stream_slice, next_page_token, worker_id=self.current_worker_id, **kwargs
+        )
 
-    def parse_response(
-        self,
-        response: requests.Response,
-        *,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> Iterable[Mapping[str, Any]]:
-
-        parsed_response = self.workday_request.parse_response(response, stream_name="worker_details")
-        for record in parsed_response:
-            yield record
-    
     def stream_slices(self, **kwargs) -> Iterable[Optional[Mapping[str, Any]]]:
         return [{"worker_id": worker_id} for worker_id in self.worker_ids]
 
 
-class WorkerDetailsHistory(IncrementalKnoeticWorkdayStream):
+class WorkerDetailsHistory(KnoeticWorkdayStream):
     primary_key = None
+    state_checkpoint_interval = None
     cursor_field = "as_of_effective_date"
 
     def __init__(
         self,
-        tenant: str,
-        url: str,
-        username: str,
-        password: str,
+        config: Mapping[str, Any],
         workday_request: WorkdayRequest,
-        page: int = 1,
-        per_page: int = 200,
-        workers_data: List[Mapping[str, Any]] = [],
+        workers_data: List[Mapping[str, Any]],
+        api_budget: APIBudget | None = None,
     ):
         super().__init__(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
+            config=config,
             workday_request=workday_request,
-            page=page,
-            per_page=per_page,
+            api_budget=api_budget,
+            file_name="worker_details.xml",
+            stream_name="worker_details",
         )
         self.workers_data = workers_data
 
     def request_body_data(
         self,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] = None,
-        next_page_token: Mapping[str, Any] = None,
+        stream_state: Mapping[str, Any] | None,
+        stream_slice: Mapping[str, Any] | None = None,
+        next_page_token: Mapping[str, Any] | None = None,
+        **kwargs,
     ) -> str:
-        worker_id = stream_slice.get("Worker_ID")
-        as_of_effective_date = stream_slice.get("as_of_effective_date")
+        if stream_slice:
+            worker_id = stream_slice["Worker_ID"]
+            as_of_effective_date = stream_slice["as_of_effective_date"]
 
-        request_config = {
-            "file_name": "worker_details_history.xml",
-            "tenant": self.tenant,
-            "username": self.username,
-            "password": self.password,
-            "page": self.page,
-            "per_page": self.per_page,
-            "worker_id": worker_id,
-            "as_of_effective_date": as_of_effective_date,
-        }
-        request_body = self.workday_request.construct_request_body(request_config)
-
-        return request_body
+        return super().request_body_data(
+            stream_state,
+            stream_slice,
+            next_page_token,
+            worker_id=worker_id,
+            as_of_effective_date=as_of_effective_date,
+            **kwargs,
+        )
 
     def parse_response(
         self,
@@ -359,7 +299,13 @@ class WorkerDetailsHistory(IncrementalKnoeticWorkdayStream):
             record["as_of_effective_date"] = stream_slice.get("as_of_effective_date")
             yield record
 
-    def stream_slices(self, sync_mode: SyncMode, cursor_field: List[str] = None, stream_state: Mapping[str, Any] = None) -> Iterable[Optional[Mapping[str, Any]]]:
+    def stream_slices(
+        self,
+        *,
+        sync_mode: SyncMode,
+        cursor_field: List[str] | None = None,
+        stream_state: Mapping[str, Any] | None = None,
+    ) -> Iterable[Mapping[str, Any] | None]:
         slices = []
         for worker in self.workers_data:
             worker_id = worker.get("Worker_ID")
@@ -377,6 +323,13 @@ class WorkerDetailsHistory(IncrementalKnoeticWorkdayStream):
                 current_date += timedelta(days=1)
         return slices
 
+    def get_updated_state(
+        self, current_stream_state: MutableMapping[str, Any], latest_record: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
+        print("latest_record", latest_record)
+        state_value = max(current_stream_state.get(self.cursor_field, ""), latest_record.get(self.cursor_field, ""))
+        return {self.cursor_field: state_value}
+
 
 class WorkerDetailsPhoto(KnoeticWorkdayStream):
     primary_key = None
@@ -384,24 +337,16 @@ class WorkerDetailsPhoto(KnoeticWorkdayStream):
     def __init__(
         self,
         *,
-        tenant: str,
-        url: str,
-        username: str,
-        password: str,
+        config: Mapping[str, Any],
         workday_request: WorkdayRequest,
-        page: int = 1,
-        per_page: int = 200,
         worker_ids: List[str],
     ):
 
         super().__init__(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
+            config=config,
             workday_request=workday_request,
-            page=page,
-            per_page=per_page,
+            file_name="worker_details_photo.xml",
+            stream_name="worker_details_photo",
         )
         self.worker_ids = worker_ids
         self.current_worker_id = None
@@ -411,19 +356,14 @@ class WorkerDetailsPhoto(KnoeticWorkdayStream):
         stream_state: Mapping[str, Any] | None,
         stream_slice: Mapping[str, Any] | None = None,
         next_page_token: Mapping[str, Any] | None = None,
-    ) -> Mapping[str, Any] | str | None:
-        self.current_worker_id = stream_slice.get("worker_id")
+        **kwargs,
+    ) -> str:
+        if stream_slice:
+            self.current_worker_id = stream_slice["worker_id"]
 
-        request_config = {
-            "file_name": "worker_details_photo.xml",
-            "tenant": self.tenant,
-            "username": self.username,
-            "password": self.password,
-            "page": self.page,
-            "per_page": self.per_page,
-            "worker_id": self.current_worker_id,
-        }
-        return self.workday_request.construct_request_body(request_config)
+        return super().request_body_data(
+            stream_state, stream_slice, next_page_token, worker_id=self.current_worker_id, **kwargs
+        )
 
     def parse_response(
         self,
@@ -436,7 +376,7 @@ class WorkerDetailsPhoto(KnoeticWorkdayStream):
         parsed_response = self.workday_request.parse_response(response, stream_name="worker_details_photo")
         for record in parsed_response:
             yield record
-    
+
     def stream_slices(self, **kwargs) -> Iterable[Optional[Mapping[str, Any]]]:
         return [{"worker_id": worker_id} for worker_id in self.worker_ids]
 
@@ -449,57 +389,13 @@ class OrganizationHierarchies(KnoeticWorkdayStream):
 
     primary_key = None
 
-    def __init__(
-        self,
-        tenant: str,
-        url: str,
-        username: str,
-        password: str,
-        workday_request: WorkdayRequest,
-        page: int = 1,
-        per_page: int = 200,
-        api_budget: APIBudget | None = None,
-    ):
+    def __init__(self, config: Mapping[str, Any], workday_request: WorkdayRequest):
         super().__init__(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
+            config=config,
             workday_request=workday_request,
-            page=page,
-            per_page=per_page,
-            api_budget=api_budget,
+            stream_name="organization_hierarchies",
+            file_name="organization_hierarchies.xml",
         )
-
-    def request_body_data(
-        self,
-        stream_state: Mapping[str, Any] | None,
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> str:
-        """
-        Override to define the request body data for the request.
-        """
-        request_config = {
-            "file_name": "organization_hierarchies.xml",
-            "tenant": self.tenant,
-            "username": self.username,
-            "password": self.password,
-            "page": self.page,
-            "per_page": self.per_page,
-        }
-        return self.workday_request.construct_request_body(request_config)
-
-    def parse_response(
-        self,
-        response: requests.Response,
-        *,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> Iterable[Mapping[str, Any]]:
-        response_json = self.workday_request.parse_response(response, stream_name="organization_hierarchies")
-        return response_json
 
 
 class Ethnicities(KnoeticWorkdayStream):
@@ -510,57 +406,13 @@ class Ethnicities(KnoeticWorkdayStream):
 
     primary_key = None
 
-    def __init__(
-        self,
-        tenant: str,
-        url: str,
-        username: str,
-        password: str,
-        workday_request: WorkdayRequest,
-        page: int = 1,
-        per_page: int = 200,
-        api_budget: APIBudget | None = None,
-    ):
+    def __init__(self, config: Mapping[str, Any], workday_request: WorkdayRequest):
         super().__init__(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
+            config=config,
             workday_request=workday_request,
-            page=page,
-            per_page=per_page,
-            api_budget=api_budget,
+            file_name="ethnicities.xml",
+            stream_name="ethinicities",
         )
-
-    def request_body_data(
-        self,
-        stream_state: Mapping[str, Any] | None,
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> str:
-        """
-        Override to define the request body data for the request.
-        """
-        request_config = {
-            "file_name": "ethnicities.xml",
-            "tenant": self.tenant,
-            "username": self.username,
-            "password": self.password,
-            "page": self.page,
-            "per_page": self.per_page,
-        }
-        return self.workday_request.construct_request_body(request_config)
-
-    def parse_response(
-        self,
-        response: requests.Response,
-        *,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> Iterable[Mapping[str, Any]]:
-        response_json = self.workday_request.parse_response(response, stream_name="ethnicities")
-        return response_json
 
 
 class GenderIdentities(KnoeticWorkdayStream):
@@ -571,57 +423,13 @@ class GenderIdentities(KnoeticWorkdayStream):
 
     primary_key = None
 
-    def __init__(
-        self,
-        tenant: str,
-        url: str,
-        username: str,
-        password: str,
-        workday_request: WorkdayRequest,
-        page: int = 1,
-        per_page: int = 200,
-        api_budget: APIBudget | None = None,
-    ):
+    def __init__(self, config: Mapping[str, Any], workday_request: WorkdayRequest):
         super().__init__(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
+            config=config,
             workday_request=workday_request,
-            page=page,
-            per_page=per_page,
-            api_budget=api_budget,
+            file_name="gender_identities.xml",
+            stream_name="gender_identities",
         )
-
-    def request_body_data(
-        self,
-        stream_state: Mapping[str, Any] | None,
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> str:
-        """
-        Override to define the request body data for the request.
-        """
-        request_config = {
-            "file_name": "gender_identities.xml",
-            "tenant": self.tenant,
-            "username": self.username,
-            "password": self.password,
-            "page": self.page,
-            "per_page": self.per_page,
-        }
-        return self.workday_request.construct_request_body(request_config)
-
-    def parse_response(
-        self,
-        response: requests.Response,
-        *,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> Iterable[Mapping[str, Any]]:
-        response_json = self.workday_request.parse_response(response, stream_name="gender_identities")
-        return response_json
 
 
 class Locations(KnoeticWorkdayStream):
@@ -632,57 +440,13 @@ class Locations(KnoeticWorkdayStream):
 
     primary_key = None
 
-    def __init__(
-        self,
-        tenant: str,
-        url: str,
-        username: str,
-        password: str,
-        workday_request: WorkdayRequest,
-        page: int = 1,
-        per_page: int = 200,
-        api_budget: APIBudget | None = None,
-    ):
+    def __init__(self, config: Mapping[str, Any], workday_request: WorkdayRequest):
         super().__init__(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
+            config=config,
             workday_request=workday_request,
-            page=page,
-            per_page=per_page,
-            api_budget=api_budget,
+            file_name="locations.xml",
+            stream_name="locations",
         )
-
-    def request_body_data(
-        self,
-        stream_state: Mapping[str, Any] | None,
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> str:
-        """
-        Override to define the request body data for the request.
-        """
-        request_config = {
-            "file_name": "locations.xml",
-            "tenant": self.tenant,
-            "username": self.username,
-            "password": self.password,
-            "page": self.page,
-            "per_page": self.per_page,
-        }
-        return self.workday_request.construct_request_body(request_config)
-
-    def parse_response(
-        self,
-        response: requests.Response,
-        *,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> Iterable[Mapping[str, Any]]:
-        response_json = self.workday_request.parse_response(response, stream_name="locations")
-        return response_json
 
 
 class JobProfiles(KnoeticWorkdayStream):
@@ -693,57 +457,13 @@ class JobProfiles(KnoeticWorkdayStream):
 
     primary_key = None
 
-    def __init__(
-        self,
-        tenant: str,
-        url: str,
-        username: str,
-        password: str,
-        workday_request: WorkdayRequest,
-        page: int = 1,
-        per_page: int = 200,
-        api_budget: APIBudget | None = None,
-    ):
+    def __init__(self, config: Mapping[str, Any], workday_request: WorkdayRequest):
         super().__init__(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
+            config=config,
             workday_request=workday_request,
-            page=page,
-            per_page=per_page,
-            api_budget=api_budget,
+            file_name="job_profiles.xml",
+            stream_name="job_profiles",
         )
-
-    def request_body_data(
-        self,
-        stream_state: Mapping[str, Any] | None,
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> str:
-        """
-        Override to define the request body data for the request.
-        """
-        request_config = {
-            "file_name": "job_profiles.xml",
-            "tenant": self.tenant,
-            "username": self.username,
-            "password": self.password,
-            "page": self.page,
-            "per_page": self.per_page,
-        }
-        return self.workday_request.construct_request_body(request_config)
-
-    def parse_response(
-        self,
-        response: requests.Response,
-        *,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> Iterable[Mapping[str, Any]]:
-        response_json = self.workday_request.parse_response(response, stream_name="job_profiles")
-        return response_json
 
 
 class Positions(KnoeticWorkdayStream):
@@ -754,59 +474,13 @@ class Positions(KnoeticWorkdayStream):
 
     primary_key = None
 
-    def __init__(
-        self,
-        tenant: str,
-        url: str,
-        username: str,
-        password: str,
-        workday_request: WorkdayRequest,
-        page: int = 1,
-        per_page: int = 200,
-        api_budget: APIBudget | None = None,
-    ):
+    def __init__(self, config: Mapping[str, Any], workday_request: WorkdayRequest):
         super().__init__(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
+            config=config,
             workday_request=workday_request,
-            page=page,
-            per_page=per_page,
-            api_budget=api_budget,
-            web_service="Staffing",
+            file_name="positions.xml",
+            stream_name="positions",
         )
-
-    def request_body_data(
-        self,
-        stream_state: Mapping[str, Any] | None,
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> str:
-        """
-        Override to define the request body data for the request.
-        """
-        request_config = {
-            "file_name": "positions.xml",
-            "tenant": self.tenant,
-            "username": self.username,
-            "password": self.password,
-            "page": self.page,
-            "per_page": self.per_page,
-        }
-        return self.workday_request.construct_request_body(request_config)
-
-
-    def parse_response(
-        self,
-        response: requests.Response,
-        *,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> Iterable[Mapping[str, Any]]:
-        response_json = self.workday_request.parse_response(response, stream_name="positions")
-        return response_json
 
 
 class SexualOrientations(KnoeticWorkdayStream):
@@ -817,57 +491,13 @@ class SexualOrientations(KnoeticWorkdayStream):
 
     primary_key = None
 
-    def __init__(
-        self,
-        tenant: str,
-        url: str,
-        username: str,
-        password: str,
-        workday_request: WorkdayRequest,
-        page: int = 1,
-        per_page: int = 200,
-        api_budget: APIBudget | None = None,
-    ):
+    def __init__(self, config: Mapping[str, Any], workday_request: WorkdayRequest):
         super().__init__(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
+            config=config,
             workday_request=workday_request,
-            page=page,
-            per_page=per_page,
-            api_budget=api_budget,
+            file_name="sexual_orientations.xml",
+            stream_name="sexual_orientations",
         )
-
-    def request_body_data(
-        self,
-        stream_state: Mapping[str, Any] | None,
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> str:
-        """
-        Override to define the request body data for the request.
-        """
-        request_config = {
-            "file_name": "sexual_orientations.xml",
-            "tenant": self.tenant,
-            "username": self.username,
-            "password": self.password,
-            "page": self.page,
-            "per_page": self.per_page,
-        }
-        return self.workday_request.construct_request_body(request_config)
-
-    def parse_response(
-        self,
-        response: requests.Response,
-        *,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
-    ) -> Iterable[Mapping[str, Any]]:
-        response_json = self.workday_request.parse_response(response, stream_name="sexual_orientations")
-        return response_json
 
 
 class References(KnoeticWorkdayStream):
@@ -880,26 +510,16 @@ class References(KnoeticWorkdayStream):
 
     def __init__(
         self,
-        tenant: str,
-        url: str,
-        username: str,
-        password: str,
+        config: Mapping[str, Any],
         workday_request: WorkdayRequest,
-        page: int = 1,
-        per_page: int = 200,
-        api_budget: APIBudget | None = None,
     ):
         super().__init__(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
+            config=config,
             workday_request=workday_request,
-            page=page,
-            per_page=per_page,
-            api_budget=api_budget,
-            web_service="Integrations",
+            file_name="references.xml",
+            stream_name="references",
         )
+        self.web_service = "Integrations"
         self.reference_types = [
             "Contingent_Worker_Type_ID",
             "Employee_Type_ID",
@@ -921,11 +541,12 @@ class References(KnoeticWorkdayStream):
         stream_state: Mapping[str, Any] | None,
         stream_slice: Mapping[str, Any] | None = None,
         next_page_token: Mapping[str, Any] | None = None,
+        **kwargs,
     ) -> str:
         """
         Override to define the request body data for the request.
         """
-        self.current_reference_type = stream_slice.get("reference_type")
+        self.current_reference_type = stream_slice["reference_type"]
         request_config = {
             "file_name": "references.xml",
             "tenant": self.tenant,
@@ -935,7 +556,7 @@ class References(KnoeticWorkdayStream):
             "per_page": self.per_page,
             "reference_subcategory_type": self.current_reference_type,
         }
-        return self.workday_request.construct_request_body(request_config)
+        return self.workday_request.construct_request_body(**request_config, **kwargs)
 
     def stream_slices(self, **kwargs) -> Iterable[Optional[Mapping[str, Any]]]:
         """
@@ -961,29 +582,14 @@ class BaseCustomReport(KnoeticWorkdayStream):
 
     def __init__(
         self,
-        tenant: str,
-        url: str,
-        username: str,
-        password: str,
-        base_snapshot_report: str,
+        config: Mapping[str, Any],
         workday_request: WorkdayRequest,
-        page: int = 1,
-        per_page: int = 200,
-        api_budget: APIBudget | None = None,
+        base_snapshot_report: Optional[str] = None,
         base_historical_report_compensation: Optional[str] = None,
         base_historical_report_job: Optional[str] = None,
     ):
-        super().__init__(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
-            workday_request=workday_request,
-            page=page,
-            per_page=per_page,
-            api_budget=api_budget,
-            web_service="customreport2",
-        )
+        super().__init__(config=config, workday_request=workday_request, file_name=None, stream_name=None)
+        self.web_service = "customreport2"
         self.base_snapshot_report = base_snapshot_report
         self.base_historical_report_compensation = base_historical_report_compensation
         self.base_historical_report_job = base_historical_report_job
@@ -1069,163 +675,47 @@ class SourceKnoeticWorkday(AbstractSource):
         """
         return True, None
 
-
     def get_worker_info_for_substreams(self, workers_stream: Workers):
         workers_data = []
         for worker in workers_stream.read_records(sync_mode="full_refresh"):
             worker_reference_ids = worker.get("Worker_Reference", {}).get("ID", [])
-            worker_id = next((ref.get('#content') for ref in worker_reference_ids if ref.get('-type') == 'WID'), None)
+            worker_id = next((ref.get("#content") for ref in worker_reference_ids if ref.get("-type") == "WID"), None)
 
             if worker_id:
-                workers_data.append({
-                    "Worker_ID": worker_id,
-                    "Original_Hire_Date": worker.get("Original_Hire_Date"),
-                    "Hire_Date": worker.get("Hire_Date"),
-                    "Termination_Date": worker.get("Termination_Date"),
-                })
-        
-        return workers_data
+                workers_data.append(
+                    {
+                        "Worker_ID": worker_id,
+                        "Original_Hire_Date": worker.get("Original_Hire_Date"),
+                        "Hire_Date": worker.get("Hire_Date"),
+                        "Termination_Date": worker.get("Termination_Date"),
+                    }
+                )
 
+        return workers_data
 
     def streams(self, config: Mapping[str, Any]) -> List[Stream]:
         """
         :param config: A Mapping of the user input configuration as defined in the connector spec.
         """
 
-        tenant = config["tenant"]
+        workday_request = WorkdayRequest()
 
-        # url should end with a trailing slash
-        url = config["url"]
-        if not url.endswith("/"):
-            url = f"{url}/"
-
-        username = config["username"]
-        password = config["password"]
-        base_snapshot_report = config.get("base_snapshot_report")
-        base_historical_report_compensation = config.get("base_historical_report_compensation")
-        base_historical_report_job = config.get("base_historical_report_job")
-        per_page = config.get("per_page", 200)
-
-        workers_stream = Workers(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
-            per_page=per_page,
-            workday_request=WorkdayRequest(),
-        )
+        workers_stream = Workers(config=config, workday_request=workday_request)
 
         workers_data = self.get_worker_info_for_substreams(workers_stream)
-        worker_ids = [worker.get("Worker_ID") for worker in workers_data]
-
-        worker_details_stream = WorkerDetails(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
-            per_page=per_page,
-            workday_request=WorkdayRequest(),
-            worker_ids=worker_ids,
-        )
-
-        worker_details_history_stream = WorkerDetailsHistory(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
-            per_page=per_page,
-            workday_request=WorkdayRequest(),
-            workers_data=workers_data,
-        )
-
-        worker_details_photo_stream = WorkerDetailsPhoto(
-            tenant=tenant,
-            url=url,
-            username=username,
-            password=password,
-            per_page=per_page,
-            workday_request=WorkdayRequest(),
-            worker_ids=worker_ids,
-        )
+        worker_ids = [worker["Worker_ID"] for worker in workers_data]
 
         return [
-            workers_stream,
-            worker_details_stream,
-            worker_details_history_stream,
-            worker_details_photo_stream,
-            OrganizationHierarchies(
-                tenant=tenant,
-                url=url,
-                username=username,
-                password=password,
-                per_page=per_page,
-                workday_request=WorkdayRequest(),
-            ),
-            Ethnicities(
-                tenant=tenant,
-                url=url,
-                username=username,
-                password=password,
-                per_page=per_page,
-                workday_request=WorkdayRequest(),
-            ),
-            GenderIdentities(
-                tenant=tenant,
-                url=url,
-                username=username,
-                password=password,
-                per_page=per_page,
-                workday_request=WorkdayRequest(),
-            ),
-            Locations(
-                tenant=tenant,
-                url=url,
-                username=username,
-                password=password,
-                per_page=per_page,
-                workday_request=WorkdayRequest(),
-            ),
-            JobProfiles(
-                tenant=tenant,
-                url=url,
-                username=username,
-                password=password,
-                per_page=per_page,
-                workday_request=WorkdayRequest(),
-            ),
-            Positions(
-                tenant=tenant,
-                url=url,
-                username=username,
-                password=password,
-                per_page=per_page,
-                workday_request=WorkdayRequest(),
-            ),
-            SexualOrientations(
-                tenant=tenant,
-                url=url,
-                username=username,
-                password=password,
-                per_page=per_page,
-                workday_request=WorkdayRequest(),
-            ),
-            References(
-                tenant=tenant,
-                url=url,
-                username=username,
-                password=password,
-                per_page=per_page,
-                workday_request=WorkdayRequest(),
-            ),
-            BaseCustomReport(
-                tenant=tenant,
-                url=url,
-                username=username,
-                password=password,
-                base_snapshot_report=base_snapshot_report,
-                base_historical_report_compensation=base_historical_report_compensation,
-                base_historical_report_job=base_historical_report_job,
-                per_page=per_page,
-                workday_request=WorkdayRequest(),
-            ),
+            Workers(config=config, workday_request=workday_request),
+            WorkerDetails(config=config, workday_request=workday_request, worker_ids=worker_ids),
+            WorkerDetailsHistory(config=config, workday_request=workday_request, workers_data=workers_data),
+            WorkerDetailsPhoto(config=config, workday_request=workday_request, worker_ids=worker_ids),
+            OrganizationHierarchies(config=config, workday_request=workday_request),
+            Ethnicities(config=config, workday_request=workday_request),
+            GenderIdentities(config=config, workday_request=workday_request),
+            Locations(config=config, workday_request=workday_request),
+            JobProfiles(config=config, workday_request=workday_request),
+            SexualOrientations(config=config, workday_request=workday_request),
+            References(config=config, workday_request=workday_request),
+            BaseCustomReport(config=config, workday_request=workday_request),
         ]

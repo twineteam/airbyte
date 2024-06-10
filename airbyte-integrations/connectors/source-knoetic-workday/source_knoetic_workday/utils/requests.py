@@ -2,12 +2,11 @@ import base64
 import csv
 import json
 import os
-import requests
 import xml.etree.ElementTree as ET
-import xmltodict
-
 from typing import Callable, Dict, List, Optional, Union
 
+import requests
+import xmltodict
 
 CURRENT_DIR: str = os.path.dirname(os.path.realpath(__file__))
 XML_DIR: str = CURRENT_DIR.replace("utils", "xml")
@@ -30,8 +29,7 @@ class WorkdayRequest:
             },
             "worker_details_history": {
                 "request_file": "worker_details_history.xml",
-                "parse_response": self.parse_worker_details_response, # Same as worker_details
-
+                "parse_response": self.parse_worker_details_response,  # Same as worker_details
             },
             "worker_details_photo": {
                 "request_file": "worker_details_photo.xml",
@@ -88,7 +86,7 @@ class WorkdayRequest:
 
         Args:
             filename (str): The name of the file to read.
-            
+
         Returns:
             str: The contents of the file.
         """
@@ -135,7 +133,7 @@ class WorkdayRequest:
             return None
 
         return found_element.text
-    
+
     @staticmethod
     def safe_get_attrib(element: ET.Element | None, attrib: str) -> str | None:
         """
@@ -153,7 +151,7 @@ class WorkdayRequest:
             return None
 
         return element.attrib.get(attrib)
-    
+
     @staticmethod
     def clean_json_string(json_string: str) -> str:
         """
@@ -166,41 +164,35 @@ class WorkdayRequest:
             str: The cleaned JSON string.
         """
         char_replacement_map = {
-            "ns0:" : "",
-            "\"@type\"": "\"-type\"",
-            "\"@Type\"": "\"-Type\"",
-            "\"@Descriptor\"": "\"-Descriptor\"",
-            "\"@System_ID\"": "\"-System_ID\"",
-            "\"@Effective_Date\"": "\"-Effective_Date\"",
-            "\"@Last_Modified\"": "\"-Last_Modified\"",
-            "\"@Public\"": "\"-Public\"",
-            "\"@Primary\"": "\"-Primary\"",
-            "\"@Is_Legal\"": "\"-Is_Legal\"",
-            "\"@Is_Preferred\"": "\"-Is_Preferred\"",
-            "\"#text\"": "\"#content\"",
+            "ns0:": "",
+            '"@type"': '"-type"',
+            '"@Type"': '"-Type"',
+            '"@Descriptor"': '"-Descriptor"',
+            '"@System_ID"': '"-System_ID"',
+            '"@Effective_Date"': '"-Effective_Date"',
+            '"@Last_Modified"': '"-Last_Modified"',
+            '"@Public"': '"-Public"',
+            '"@Primary"': '"-Primary"',
+            '"@Is_Legal"': '"-Is_Legal"',
+            '"@Is_Preferred"': '"-Is_Preferred"',
+            '"#text"': '"#content"',
         }
 
         for old_char, new_char in char_replacement_map.items():
             json_string = json_string.replace(old_char, new_char)
-        
-        return json_string
-    
-    def construct_request_body(
-        # self, file_name: str, tenant: str, username: str, password: str, page: int, per_page: int = 200
-        self, request_config: Dict[str, str]
-    ) -> str:
-        # Required fields
-        file_name = request_config.get("file_name")
-        tenant = request_config.get("tenant")
-        username = request_config.get("username")
-        password = request_config.get("password")
 
-        # Optional fields
-        page = request_config.get("page")
-        per_page = request_config.get("per_page")
-        worker_id = request_config.get("worker_id")
-        as_of_effective_date = request_config.get("as_of_effective_date")
-        reference_subcategory_type = request_config.get("reference_subcategory_type")
+        return json_string
+
+    def construct_request_body(
+        self,
+        file_name: str,
+        tenant: str,
+        username: str,
+        password: str,
+        per_page: int,
+        page: int,
+        **kwargs,
+    ) -> str:
 
         specific_xml_content: str = self.read_xml_file(file_name)
         if "PAGE_NUMBER" in specific_xml_content:
@@ -208,11 +200,17 @@ class WorkdayRequest:
         if "PER_PAGE" in specific_xml_content:
             specific_xml_content = specific_xml_content.replace("PER_PAGE", str(per_page))
         if "WORKER_ID" in specific_xml_content:
+            assert "worker_id" in kwargs, "worker_id is required for this request"
+            worker_id = kwargs.get("worker_id", "")
             specific_xml_content = specific_xml_content.replace("WORKER_ID", worker_id)
         if "AS_OF_EFFECTIVE_DATE" in specific_xml_content:
+            as_of_effective_date = kwargs.get("as_of_effective_date", "")
             specific_xml_content = specific_xml_content.replace("AS_OF_EFFECTIVE_DATE", as_of_effective_date)
         if "REFERENCE_SUBCATEGORY_TYPE" in specific_xml_content:
-            specific_xml_content = specific_xml_content.replace("REFERENCE_SUBCATEGORY_TYPE", reference_subcategory_type)
+            reference_subcategory_type = kwargs.get("reference_subcategory_type", "")
+            specific_xml_content = specific_xml_content.replace(
+                "REFERENCE_SUBCATEGORY_TYPE", reference_subcategory_type
+            )
 
         header_content: str = self.header_template % (f"{username}@{tenant}", password)
         full_xml: str = self.base_template % (header_content, specific_xml_content)
@@ -222,7 +220,7 @@ class WorkdayRequest:
     def parse_response(self, response: requests.Response, stream_name) -> list:
         if response.status_code != 200:
             raise requests.exceptions.HTTPError(f"Request failed with status code {response.status_code}.")
-        
+
         custom_parse_response_function = self.stream_mappings[stream_name].get("parse_response")
 
         try:
@@ -250,16 +248,28 @@ class WorkdayRequest:
             # Parse XML data into JSON
             xml_input = ET.tostring(worker)
             o = xmltodict.parse(xml_input=xml_input)
-            
+
             # Remove namespace prefix from keys
             cleaned_json_string = self.clean_json_string(json.dumps(o))
             json_data = json.loads(cleaned_json_string)
             worker_data = json_data.get("Worker")
-            
+
             if worker_data is not None:
-                original_hire_date = self.safe_find_text(worker, "{urn:com.workday/bsvc}Worker_Data/{urn:com.workday/bsvc}Employment_Data/{urn:com.workday/bsvc}Worker_Status_Data/{urn:com.workday/bsvc}Original_Hire_Date", namespaces)
-                hire_date = self.safe_find_text(worker, "{urn:com.workday/bsvc}Worker_Data/{urn:com.workday/bsvc}Employment_Data/{urn:com.workday/bsvc}Worker_Status_Data/{urn:com.workday/bsvc}Hire_Date", namespaces)
-                termination_date = self.safe_find_text(worker, "{urn:com.workday/bsvc}Worker_Data/{urn:com.workday/bsvc}Employment_Data/{urn:com.workday/bsvc}Worker_Status_Data/{urn:com.workday/bsvc}Termination_Date", namespaces)
+                original_hire_date = self.safe_find_text(
+                    worker,
+                    "{urn:com.workday/bsvc}Worker_Data/{urn:com.workday/bsvc}Employment_Data/{urn:com.workday/bsvc}Worker_Status_Data/{urn:com.workday/bsvc}Original_Hire_Date",
+                    namespaces,
+                )
+                hire_date = self.safe_find_text(
+                    worker,
+                    "{urn:com.workday/bsvc}Worker_Data/{urn:com.workday/bsvc}Employment_Data/{urn:com.workday/bsvc}Worker_Status_Data/{urn:com.workday/bsvc}Hire_Date",
+                    namespaces,
+                )
+                termination_date = self.safe_find_text(
+                    worker,
+                    "{urn:com.workday/bsvc}Worker_Data/{urn:com.workday/bsvc}Employment_Data/{urn:com.workday/bsvc}Worker_Status_Data/{urn:com.workday/bsvc}Termination_Date",
+                    namespaces,
+                )
 
                 worker_data["Original_Hire_Date"] = original_hire_date
                 worker_data["Hire_Date"] = hire_date
@@ -267,10 +277,12 @@ class WorkdayRequest:
 
                 del worker_data["Worker_Data"]["Employment_Data"]
                 workers.append(worker_data)
-            
+
         return workers
 
-    def parse_worker_details_response(self, response_data: ET.Element, namespaces: Dict[str, str]) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+    def parse_worker_details_response(
+        self, response_data: ET.Element, namespaces: Dict[str, str]
+    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
         worker_details: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
         worker_elem = response_data.find("{urn:com.workday/bsvc}Worker", namespaces)
 
@@ -280,26 +292,27 @@ class WorkdayRequest:
         # Parse XML data into JSON
         xml_input = ET.tostring(worker_elem)
         o = xmltodict.parse(xml_input=xml_input)
-        
+
         # Remove namespace prefix from keys
         cleaned_json_string = self.clean_json_string(json.dumps(o))
         json_data = json.loads(cleaned_json_string)
         worker_data = json_data.get("Worker")
-        
+
         if worker_data is not None:
             worker_details.append(worker_data)
-        
-        return worker_details
-    
 
-    def parse_worker_details_photo_response(self, response_data: ET.Element, namespaces: Dict[str, str]) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+        return worker_details
+
+    def parse_worker_details_photo_response(
+        self, response_data: ET.Element, namespaces: Dict[str, str]
+    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
         worker_details_photo: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
 
         worker_elem = response_data.find("{urn:com.workday/bsvc}Worker", namespaces)
 
         if worker_elem is None:
             return worker_details_photo
-        
+
         worker_reference_elem = worker_elem.find("{urn:com.workday/bsvc}Worker_Reference", namespaces)
         worker_reference = {
             "ID": [
@@ -334,10 +347,7 @@ class WorkdayRequest:
             filepath = None
 
         worker_data = {
-            "Photo_Data": {
-                "Filename": filename,
-                "Image": filepath
-            },
+            "Photo_Data": {"Filename": filename, "Image": filepath},
             "User_ID": self.safe_find_text(worker_data_elem, "{urn:com.workday/bsvc}User_ID", namespaces),
             "Worker_ID": self.safe_find_text(worker_data_elem, "{urn:com.workday/bsvc}Worker_ID", namespaces),
         }
@@ -346,12 +356,13 @@ class WorkdayRequest:
             {
                 "Worker_Reference": worker_reference,
                 "Worker_Data": worker_data,
-                "Worker_Descriptor": self.safe_find_text(worker_elem, "{urn:com.workday/bsvc}Worker_Descriptor", namespaces),
+                "Worker_Descriptor": self.safe_find_text(
+                    worker_elem, "{urn:com.workday/bsvc}Worker_Descriptor", namespaces
+                ),
             }
         )
 
         return worker_details_photo
-
 
     def parse_organization_hierarchies_response(
         self, response_data: ET.Element, namespaces: Dict[str, str]
@@ -363,7 +374,7 @@ class WorkdayRequest:
             # Parse XML data into JSON
             xml_input = ET.tostring(org)
             o = xmltodict.parse(xml_input=xml_input)
-            
+
             # Remove namespace prefix from keys
             cleaned_json_string = self.clean_json_string(json.dumps(o))
             json_data = json.loads(cleaned_json_string)
@@ -387,7 +398,7 @@ class WorkdayRequest:
             # Parse XML data into JSON
             xml_input = ET.tostring(ethnicity)
             o = xmltodict.parse(xml_input=xml_input)
-            
+
             # Remove namespace prefix from keys
             cleaned_json_string = self.clean_json_string(json.dumps(o))
             json_data = json.loads(cleaned_json_string)
@@ -411,7 +422,7 @@ class WorkdayRequest:
             # Parse XML data into JSON
             xml_input = ET.tostring(gender_identity)
             o = xmltodict.parse(xml_input=xml_input)
-            
+
             # Remove namespace prefix from keys
             cleaned_json_string = self.clean_json_string(json.dumps(o))
             json_data = json.loads(cleaned_json_string)
@@ -434,7 +445,7 @@ class WorkdayRequest:
             # Parse XML data into JSON
             xml_input = ET.tostring(location)
             o = xmltodict.parse(xml_input=xml_input)
-            
+
             # Remove namespace prefix from keys
             cleaned_json_string = self.clean_json_string(json.dumps(o))
             json_data = json.loads(cleaned_json_string)
@@ -458,7 +469,7 @@ class WorkdayRequest:
             # Parse XML data into JSON
             xml_input = ET.tostring(job_profile)
             o = xmltodict.parse(xml_input=xml_input)
-            
+
             # Remove namespace prefix from keys
             cleaned_json_string = self.clean_json_string(json.dumps(o))
             json_data = json.loads(cleaned_json_string)
@@ -482,12 +493,12 @@ class WorkdayRequest:
             # Parse XML data into JSON
             xml_input = ET.tostring(position)
             o = xmltodict.parse(xml_input=xml_input)
-            
+
             # Remove namespace prefix from keys
             cleaned_json_string = self.clean_json_string(json.dumps(o))
             json_data = json.loads(cleaned_json_string)
             position_data = json_data.get("Position")
-            
+
             if position_data is not None:
                 positions.append(position_data)
 
@@ -506,7 +517,7 @@ class WorkdayRequest:
             # Parse XML data into JSON
             xml_input = ET.tostring(sexual_orientation)
             o = xmltodict.parse(xml_input=xml_input)
-            
+
             # Remove namespace prefix from keys
             cleaned_json_string = self.clean_json_string(json.dumps(o))
             json_data = json.loads(cleaned_json_string)
