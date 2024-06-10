@@ -117,12 +117,12 @@ class WorkdayRequest:
         Safely finds and returns the text content of an XML element.
 
         Args:
-            element (ET.Element | None): The XML element to search within.
+            element (ET.Element): The XML element to search within.
             tag (str): The tag name of the element to find.
             namespaces (Dict[str, str]): A dictionary of XML namespace prefixes and URIs.
 
         Returns:
-            str | None: The text content of the found element, or None if the element or tag is not found.
+            str: The text content of the found element, or None if the element or tag is not found.
 
         """
         if element is None:
@@ -135,16 +135,16 @@ class WorkdayRequest:
         return found_element.text
 
     @staticmethod
-    def safe_get_attrib(element: ET.Element | None, attrib: str) -> str | None:
+    def safe_get_attrib(element: ET.Element, attrib: str) -> str:
         """
         Safely finds and returns the value of an XML element attribute.
 
         Args:
-            element (ET.Element | None): The XML element to search within.
+            element (ET.Element): The XML element to search within.
             attrib (str): The attribute name to find.
 
         Returns:
-            str | None: The value of the found attribute, or None if the element or attribute is not found.
+            str: The value of the found attribute, or None if the element or attribute is not found.
 
         """
         if element is None:
@@ -241,9 +241,9 @@ class WorkdayRequest:
 
     def parse_workers_response(
         self, response_data: ET.Element, namespaces: Dict[str, str]
-    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+    ) -> List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]]:
 
-        workers: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+        workers: List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]] = []
         for worker in response_data.findall("{urn:com.workday/bsvc}Worker", namespaces):
             # Parse XML data into JSON
             xml_input = ET.tostring(worker)
@@ -282,8 +282,8 @@ class WorkdayRequest:
 
     def parse_worker_details_response(
         self, response_data: ET.Element, namespaces: Dict[str, str]
-    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
-        worker_details: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+    ) -> List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]]:
+        worker_details: List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]] = []
         worker_elem = response_data.find("{urn:com.workday/bsvc}Worker", namespaces)
 
         if worker_elem is None:
@@ -305,8 +305,8 @@ class WorkdayRequest:
 
     def parse_worker_details_photo_response(
         self, response_data: ET.Element, namespaces: Dict[str, str]
-    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
-        worker_details_photo: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+    ) -> List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]]:
+        worker_details_photo: List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]] = []
 
         worker_elem = response_data.find("{urn:com.workday/bsvc}Worker", namespaces)
 
@@ -366,9 +366,9 @@ class WorkdayRequest:
 
     def parse_organization_hierarchies_response(
         self, response_data: ET.Element, namespaces: Dict[str, str]
-    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+    ) -> List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]]:
 
-        organization_hierarchies: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+        organization_hierarchies: List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]] = []
 
         for org in response_data.findall("{urn:com.workday/bsvc}Organization", namespaces):
             # Parse XML data into JSON
@@ -387,9 +387,9 @@ class WorkdayRequest:
 
     def parse_ethnicities_response(
         self, response_data: ET.Element, namespaces: Dict[str, str]
-    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+    ) -> List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]]:
 
-        ethnicities: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+        ethnicities: List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]] = []
 
         if response_data is None:
             return ethnicities
@@ -411,9 +411,9 @@ class WorkdayRequest:
 
     def parse_gender_identities_response(
         self, response_data: ET.Element, namespaces: Dict[str, str]
-    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+    ) -> List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]]:
 
-        gender_identities: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+        gender_identities: List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]] = []
 
         if response_data is None:
             return gender_identities
@@ -435,8 +435,8 @@ class WorkdayRequest:
 
     def parse_locations_response(
         self, response_data: ET.Element, namespaces: Dict[str, str]
-    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
-        locations: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+    ) -> List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]]:
+        locations: List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]] = []
 
         if response_data is None:
             return locations
@@ -458,9 +458,9 @@ class WorkdayRequest:
 
     def parse_job_profiles_response(
         self, response_data: ET.Element, namespaces: Dict[str, str]
-    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+    ) -> List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]]:
 
-        job_profiles: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+        job_profiles: List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]] = []
 
         if response_data is None:
             return job_profiles
@@ -482,9 +482,9 @@ class WorkdayRequest:
 
     def parse_positions_response(
         self, response_data: ET.Element, namespaces: Dict[str, str]
-    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+    ) -> List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]]:
 
-        positions: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+        positions: List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]] = []
 
         if response_data is None:
             return positions
@@ -506,9 +506,9 @@ class WorkdayRequest:
 
     def parse_sexual_orientations_response(
         self, response_data: ET.Element, namespaces: Dict[str, str]
-    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+    ) -> List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]]:
 
-        sexual_orientations: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+        sexual_orientations: List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]] = []
 
         if response_data is None:
             return sexual_orientations
@@ -530,7 +530,7 @@ class WorkdayRequest:
 
     def parse_references_response(
         self, response_data: ET.Element, namespaces: Dict[str, str]
-    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+    ) -> List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]]:
 
         references: List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]] = []
 
@@ -582,7 +582,7 @@ class WorkdayRequest:
 
     def parse_base_snapshot_report_response(
         self, response: requests.Response
-    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+    ) -> List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]]:
         response_csv = response.content.decode("utf-8")
         reader = csv.DictReader(response_csv.splitlines())
 
@@ -590,7 +590,7 @@ class WorkdayRequest:
 
     def parse_base_historical_report_compensation_response(
         self, response: requests.Response
-    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+    ) -> List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]]:
 
         xml_data = response.text
         root = ET.fromstring(xml_data)
@@ -615,7 +615,7 @@ class WorkdayRequest:
             main_compensation_tag = "Job_History_from_Previous_System_group"
             sub_compensation_tag = "Job_Position_History_Record_from_Previous_System"
 
-        compensation_records: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+        compensation_records: List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]] = []
 
         for report_entry in root.findall(f".//{{{namespace_tag}}}Report_Entry", namespaces):
             employee_id = self.safe_find_text(report_entry, f"{{{namespace_tag}}}Employee_ID", namespaces)
@@ -692,7 +692,7 @@ class WorkdayRequest:
 
     def parse_base_historical_report_job_response(
         self, response: requests.Response
-    ) -> List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]]:
+    ) -> List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]]:
         xml_data = response.text
         root = ET.fromstring(xml_data)
 
@@ -703,11 +703,11 @@ class WorkdayRequest:
         main_job_tag = "Job_History_from_Previous_System_group"
         sub_job_tag = "History_Record"
 
-        job_records: List[Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]] = []
+        job_records: List[Dict[str, Optional[Union[str, List[Dict[str, str]]]]]] = []
 
         def get_all_positions_group_data(
             all_positions_group_elem: ET.Element,
-        ) -> Dict[str, Optional[Union[str | None, List[Dict[str, str]]]]]:
+        ) -> Dict[str, Optional[Union[str, List[Dict[str, str]]]]]:
             position_elem = all_positions_group_elem.find(f"{{{namespace_tag}}}Position", namespaces)
             position_worker_type_elem = all_positions_group_elem.find(
                 f"{{{namespace_tag}}}Position_Worker_Type", namespaces

@@ -77,19 +77,19 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         self,
         config: Mapping[str, Any],
         workday_request: WorkdayRequest,
-        file_name: str | None,
-        stream_name: str | None,
-        api_budget: APIBudget | None = None,
+        file_name: str,
+        stream_name: str,
+        api_budget: APIBudget = None,
     ):
         super().__init__(api_budget)
-        self.api_version = config["api_version"]
-        self.web_service = config["web_service"]
-        self.tenant = config["tenant"]
-        self.url = config["url"]
-        self.username = config["username"]
-        self.password = config["password"]
+        self.api_version = config.get("api_version", "37.2")
+        self.web_service = config.get("web_service", "Human_Resources")
+        self.tenant = config.get("tenant")
+        self.url = config.get("url")
+        self.username = config.get("username")
+        self.password = config.get("password")
         self.workday_request = workday_request
-        self.per_page = config["per_page"]
+        self.per_page = config.get("per_page", 200)
         self.page = 1
         self.file_name = file_name
         self.stream_name = stream_name
@@ -144,9 +144,9 @@ class KnoeticWorkdayStream(HttpStream, ABC):
 
     def request_body_data(
         self,
-        stream_state: Mapping[str, Any] | None,
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
+        stream_state: Mapping[str, Any],
+        stream_slice: Mapping[str, Any] = None,
+        next_page_token: Mapping[str, Any] = None,
         **kwargs,
     ) -> str:
         """
@@ -170,9 +170,9 @@ class KnoeticWorkdayStream(HttpStream, ABC):
     def path(
         self,
         *,
-        stream_state: Mapping[str, Any] | None = None,
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
+        stream_state: Mapping[str, Any] = None,
+        stream_slice: Mapping[str, Any] = None,
+        next_page_token: Mapping[str, Any] = None,
     ) -> str:
         return f"{self.tenant}/{self.web_service}/{self.api_version}"
 
@@ -181,8 +181,8 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         response: requests.Response,
         *,
         stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
+        stream_slice: Mapping[str, Any] = None,
+        next_page_token: Mapping[str, Any] = None,
     ) -> Iterable[Mapping[str, Any]]:
 
         parsed_response = self.workday_request.parse_response(response, stream_name=self.stream_name)
@@ -198,7 +198,7 @@ class Workers(KnoeticWorkdayStream):
 
     primary_key = None
 
-    def __init__(self, config: Mapping[str, Any], workday_request: WorkdayRequest, api_budget: APIBudget | None = None):
+    def __init__(self, config: Mapping[str, Any], workday_request: WorkdayRequest, api_budget: APIBudget = None):
         super().__init__(
             config=config,
             workday_request=workday_request,
@@ -216,7 +216,7 @@ class WorkerDetails(KnoeticWorkdayStream):
         config: Mapping[str, Any],
         workday_request: WorkdayRequest,
         worker_ids: List[str],
-        api_budget: APIBudget | None = None,
+        api_budget: APIBudget = None,
     ):
         super().__init__(
             config=config,
@@ -229,9 +229,9 @@ class WorkerDetails(KnoeticWorkdayStream):
 
     def request_body_data(
         self,
-        stream_state: Mapping[str, Any] | None,
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
+        stream_state: Mapping[str, Any],
+        stream_slice: Mapping[str, Any] = None,
+        next_page_token: Mapping[str, Any] = None,
         **kwargs,
     ) -> str:
         if stream_slice:
@@ -255,7 +255,7 @@ class WorkerDetailsHistory(KnoeticWorkdayStream):
         config: Mapping[str, Any],
         workday_request: WorkdayRequest,
         workers_data: List[Mapping[str, Any]],
-        api_budget: APIBudget | None = None,
+        api_budget: APIBudget = None,
     ):
         super().__init__(
             config=config,
@@ -268,9 +268,9 @@ class WorkerDetailsHistory(KnoeticWorkdayStream):
 
     def request_body_data(
         self,
-        stream_state: Mapping[str, Any] | None,
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
+        stream_state: Mapping[str, Any],
+        stream_slice: Mapping[str, Any] = None,
+        next_page_token: Mapping[str, Any] = None,
         **kwargs,
     ) -> str:
         if stream_slice:
@@ -291,8 +291,8 @@ class WorkerDetailsHistory(KnoeticWorkdayStream):
         response: requests.Response,
         *,
         stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
+        stream_slice: Mapping[str, Any] = None,
+        next_page_token: Mapping[str, Any] = None,
     ) -> Iterable[Mapping[str, Any]]:
         parsed_response = self.workday_request.parse_response(response, stream_name="worker_details_history")
         for record in parsed_response:
@@ -303,9 +303,9 @@ class WorkerDetailsHistory(KnoeticWorkdayStream):
         self,
         *,
         sync_mode: SyncMode,
-        cursor_field: List[str] | None = None,
-        stream_state: Mapping[str, Any] | None = None,
-    ) -> Iterable[Mapping[str, Any] | None]:
+        cursor_field: List[str] = None,
+        stream_state: Mapping[str, Any] = None,
+    ) -> Iterable[Mapping[str, Any]]:
         slices = []
         for worker in self.workers_data:
             # worker_id = worker.get("Worker_ID")
@@ -360,9 +360,9 @@ class WorkerDetailsPhoto(KnoeticWorkdayStream):
 
     def request_body_data(
         self,
-        stream_state: Mapping[str, Any] | None,
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
+        stream_state: Mapping[str, Any],
+        stream_slice: Mapping[str, Any] = None,
+        next_page_token: Mapping[str, Any] = None,
         **kwargs,
     ) -> str:
         if stream_slice:
@@ -377,8 +377,8 @@ class WorkerDetailsPhoto(KnoeticWorkdayStream):
         response: requests.Response,
         *,
         stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
+        stream_slice: Mapping[str, Any] = None,
+        next_page_token: Mapping[str, Any] = None,
     ) -> Iterable[Mapping[str, Any]]:
         parsed_response = self.workday_request.parse_response(response, stream_name="worker_details_photo")
         for record in parsed_response:
@@ -545,9 +545,9 @@ class References(KnoeticWorkdayStream):
 
     def request_body_data(
         self,
-        stream_state: Mapping[str, Any] | None,
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
+        stream_state: Mapping[str, Any],
+        stream_slice: Mapping[str, Any] = None,
+        next_page_token: Mapping[str, Any] = None,
         **kwargs,
     ) -> str:
         """
@@ -576,8 +576,8 @@ class References(KnoeticWorkdayStream):
         response: requests.Response,
         *,
         stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
+        stream_slice: Mapping[str, Any] = None,
+        next_page_token: Mapping[str, Any] = None,
     ) -> Iterable[Mapping[str, Any]]:
         response_json = self.workday_request.parse_response(response, stream_name="references")
         for record in response_json:
@@ -608,9 +608,9 @@ class BaseCustomReport(KnoeticWorkdayStream):
     def path(
         self,
         *,
-        stream_state: Mapping[str, Any] | None = None,
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
+        stream_state: Mapping[str, Any] = None,
+        stream_slice: Mapping[str, Any] = None,
+        next_page_token: Mapping[str, Any] = None,
     ) -> str:
         report_name = stream_slice.get("report_name")
         format_type = stream_slice.get("format_type")
@@ -621,9 +621,9 @@ class BaseCustomReport(KnoeticWorkdayStream):
     def request_headers(
         self,
         *,
-        stream_state: Mapping[str, Any] | None = None,
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
+        stream_state: Mapping[str, Any] = None,
+        stream_slice: Mapping[str, Any] = None,
+        next_page_token: Mapping[str, Any] = None,
     ) -> Mapping[str, Any]:
         format_type = "application/xml" if stream_slice.get("format_type") == "xml" else "text/csv"
         token = base64.b64encode(f"{self.username}:{self.password}".encode("utf-8")).decode("utf-8")
@@ -644,8 +644,8 @@ class BaseCustomReport(KnoeticWorkdayStream):
         response: requests.Response,
         *,
         stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] | None = None,
-        next_page_token: Mapping[str, Any] | None = None,
+        stream_slice: Mapping[str, Any] = None,
+        next_page_token: Mapping[str, Any] = None,
     ) -> Iterable[Mapping[str, Any]]:
         if stream_slice.get("format_type") == "xml":
             if stream_slice.get("report_name") == self.base_historical_report_compensation:
