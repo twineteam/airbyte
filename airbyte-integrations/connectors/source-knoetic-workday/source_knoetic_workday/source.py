@@ -308,23 +308,20 @@ class WorkerDetailsHistory(KnoeticWorkdayStream):
     ) -> Iterable[Mapping[str, Any]]:
         slices = []
         for worker in self.workers_data:
-            # worker_id = worker.get("Worker_ID")
-            # original_hire_date = datetime.strptime(worker.get("Original_Hire_Date"), "%Y-%m-%d")
-            # termination_date = worker.get("Termination_Date")
-            # if termination_date:
-            #     end_date = datetime.strptime(termination_date, "%Y-%m-%d")
-            # else:
-            #     end_date = datetime.now()
+            worker_id = worker.get("Worker_ID")
+            original_hire_date = datetime.strptime(worker.get("Original_Hire_Date"), "%Y-%m-%d")
+            termination_date = worker.get("Termination_Date")
+            if termination_date:
+                end_date = datetime.strptime(termination_date, "%Y-%m-%d")
+            else:
+                end_date = datetime.now()
 
-            # state_date = stream_state.get(self.cursor_field) if stream_state else original_hire_date
-            # current_date = max(state_date, original_hire_date)
-            # while current_date <= end_date:
-            #     slices.append({"Worker_ID": worker_id, "as_of_effective_date": current_date.strftime("%Y-%m-%d")})
-            #     current_date += timedelta(days=1)
-            for i in range(4, 7):
-                slices.append(
-                    {"Worker_ID": worker.get("Worker_ID"), "as_of_effective_date": datetime.today() - timedelta(days=i)}
-                )
+            state_date = stream_state.get(self.cursor_field) if stream_state else original_hire_date
+            current_date = max(state_date, original_hire_date)
+            while current_date <= end_date:
+                slices.append({"Worker_ID": worker_id, "as_of_effective_date": current_date.strftime("%Y-%m-%d")})
+                current_date += timedelta(days=1)
+
         return slices
 
     def get_updated_state(
