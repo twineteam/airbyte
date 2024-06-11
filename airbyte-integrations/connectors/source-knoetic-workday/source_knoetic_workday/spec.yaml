@@ -52,5 +52,6 @@ connectionSpecification:
     per_page:
       type: integer
       description: The number of records to fetch per page
+      default: 200
       minimum: 1
       maximum: 999

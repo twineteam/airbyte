@@ -1,13 +1,14 @@
 import base64
 import logging
+import time
 from abc import ABC
 from datetime import datetime, timedelta
 from typing import Any, Iterable, List, Mapping, MutableMapping, Optional, Tuple
 
 import requests
-from airbyte_cdk.models import SyncMode
+from airbyte_cdk.models import AirbyteMessage, SyncMode
 from airbyte_cdk.sources import AbstractSource
-from airbyte_cdk.sources.streams import Stream
+from airbyte_cdk.sources.streams import IncrementalMixin, Stream
 from airbyte_cdk.sources.streams.call_rate import APIBudget
 from airbyte_cdk.sources.streams.http import HttpStream
 
@@ -142,7 +143,7 @@ class KnoeticWorkdayStream(HttpStream, ABC):
 
         return None
 
-    def request_body_data(
+    def request_body_data(  # type: ignore
         self,
         stream_state: Mapping[str, Any],
         stream_slice: Mapping[str, Any] = None,
@@ -245,28 +246,41 @@ class WorkerDetails(KnoeticWorkdayStream):
         return [{"worker_id": worker_id} for worker_id in self.worker_ids]
 
 
-class WorkerDetailsHistory(KnoeticWorkdayStream):
-    primary_key = None
-    state_checkpoint_interval = None
-    cursor_field = "as_of_effective_date"
+class WorkerDetailsHistory(KnoeticWorkdayStream, IncrementalMixin):
+    primary_key = "id"
+    state_checkpoint_interval = 100
+    cursor_field = "state"
 
     def __init__(
         self,
         config: Mapping[str, Any],
         workday_request: WorkdayRequest,
         workers_data: List[Mapping[str, Any]],
-        api_budget: APIBudget = None,
     ):
         super().__init__(
             config=config,
             workday_request=workday_request,
-            api_budget=api_budget,
             file_name="worker_details.xml",
             stream_name="worker_details",
         )
         self.workers_data = workers_data
+        self._cursor_value = None
 
-    def request_body_data(
+    @property
+    def state(self) -> Mapping[str, Any]:
+        return {self.cursor_field: str(self._cursor_value)}
+
+    @state.setter
+    def state(self, value: Mapping[str, Any]):
+        print("value", value)
+        print("self._cursor_value", self._cursor_value)
+        time.sleep(5)
+        if not self._cursor_value:
+            self._cursor_value = value
+        else:
+            self._cursor_value = self._cursor_value.update(value)
+
+    def request_body_data(  # type: ignore
         self,
         stream_state: Mapping[str, Any],
         stream_slice: Mapping[str, Any] = None,
@@ -299,6 +313,20 @@ class WorkerDetailsHistory(KnoeticWorkdayStream):
             record["as_of_effective_date"] = stream_slice.get("as_of_effective_date")
             yield record
 
+    def read_records(
+        self,
+        sync_mode: SyncMode,
+        cursor_field: List[str] | None = None,
+        stream_slice: Mapping[str, Any] | None = None,
+        stream_state: Mapping[str, Any] | None = None,
+    ) -> Iterable[Mapping[str, Any] | AirbyteMessage]:
+        for record in super().read_records(sync_mode, cursor_field, stream_slice, stream_state):
+            if self._cursor_value:
+                self._cursor_value.update({record["Worker_Data"]["Worker_ID"]: record["as_of_effective_date"]})
+            else:
+                self._cursor_value = {record["Worker_Data"]["Worker_ID"]: record["as_of_effective_date"]}
+            yield record
+
     def stream_slices(
         self,
         *,
@@ -306,33 +334,31 @@ class WorkerDetailsHistory(KnoeticWorkdayStream):
         cursor_field: List[str] = None,
         stream_state: Mapping[str, Any] = None,
     ) -> Iterable[Mapping[str, Any]]:
+
+        min_original_hire_date = min(
+            datetime.strptime(worker.get("Original_Hire_Date"), "%Y-%m-%d") for worker in self.workers_data
+        )
+        state_date = stream_state.get(self.cursor_field) if stream_state else min_original_hire_date
+
         slices = []
         for worker in self.workers_data:
             worker_id = worker.get("Worker_ID")
             original_hire_date = datetime.strptime(worker.get("Original_Hire_Date"), "%Y-%m-%d")
+
+            start_date = max(state_date, original_hire_date)
+
             termination_date = worker.get("Termination_Date")
             if termination_date:
                 end_date = datetime.strptime(termination_date, "%Y-%m-%d")
             else:
                 end_date = datetime.now()
 
-            state_date = stream_state.get(self.cursor_field) if stream_state else original_hire_date
-            current_date = max(state_date, original_hire_date)
-            while current_date <= end_date:
-                slices.append({"Worker_ID": worker_id, "as_of_effective_date": current_date.strftime("%Y-%m-%d")})
-                current_date += timedelta(days=1)
+            start_date = end_date - timedelta(days=3)
+            while start_date <= end_date:
+                slices.append({"Worker_ID": worker_id, "as_of_effective_date": start_date.strftime("%Y-%m-%d")})
+                start_date += timedelta(days=1)
 
         return slices
-
-    def get_updated_state(
-        self, current_stream_state: MutableMapping[str, Any], latest_record: Mapping[str, Any]
-    ) -> Mapping[str, Any]:
-        print("current_stream_state", current_stream_state)
-        print("latest_record", latest_record)
-
-        state_value = max(current_stream_state.get(self.cursor_field, ""), latest_record.get(self.cursor_field, ""))
-
-        return {self.cursor_field: state_value}
 
 
 class WorkerDetailsPhoto(KnoeticWorkdayStream):
@@ -704,9 +730,42 @@ class SourceKnoeticWorkday(AbstractSource):
 
         workday_request = WorkdayRequest()
 
-        workers_stream = Workers(config=config, workday_request=workday_request)
+        # workers_stream = Workers(config=config, workday_request=workday_request)
 
-        workers_data = self.get_worker_info_for_substreams(workers_stream)
+        # workers_data = self.get_worker_info_for_substreams(workers_stream)
+        workers_data = [
+            {
+                "Worker_ID": "65fd8bbd9d35100651cdc72f47ca0000",
+                "Original_Hire_Date": "2012-05-31",
+                "Hire_Date": "2012-05-31",
+                "Termination_Date": None,
+            },
+            {
+                "Worker_ID": "65fd8bbd9d35100651cde2c918f30001",
+                "Original_Hire_Date": "2013-08-14",
+                "Hire_Date": "2013-08-14",
+                "Termination_Date": None,
+            },
+            {
+                "Worker_ID": "65fd8bbd9d35100651cdef63f5820000",
+                "Original_Hire_Date": "2013-09-01",
+                "Hire_Date": "2013-09-01",
+                "Termination_Date": None,
+            },
+            {
+                "Worker_ID": "65fd8bbd9d35100651cdfb6303620001",
+                "Original_Hire_Date": "2013-09-01",
+                "Hire_Date": "2013-09-01",
+                "Termination_Date": None,
+            },
+            {
+                "Worker_ID": "65fd8bbd9d35100651ce076303c00000",
+                "Original_Hire_Date": "2014-06-09",
+                "Hire_Date": "2014-06-09",
+                "Termination_Date": None,
+            },
+        ]
+
         worker_ids = [worker["Worker_ID"] for worker in workers_data]
 
         return [
