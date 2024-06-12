@@ -1,15 +1,13 @@
 import base64
 import logging
-import time
 from abc import ABC
 from datetime import datetime, timedelta
-from typing import Any, Iterable, List, Mapping, MutableMapping, Optional, Tuple
+from typing import Any, Iterable, List, Mapping, Optional, Tuple, Union
 
 import requests
 from airbyte_cdk.models import AirbyteMessage, SyncMode
 from airbyte_cdk.sources import AbstractSource
 from airbyte_cdk.sources.streams import IncrementalMixin, Stream
-from airbyte_cdk.sources.streams.call_rate import APIBudget
 from airbyte_cdk.sources.streams.http import HttpStream
 
 from .utils.requests import WorkdayRequest
@@ -27,33 +25,23 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         - POST Human_Resources/37.2
 
     then you should have these classes:
-    - `class KnoeticWorkdayStream(HttpStream, ABC)` which is the current class
-    - `class IncrementalKnoeticWorkdayStream(KnoeticWorkdayStream, ABC)` contains behavior to pull
-    data incrementally for workers using `Human_Resources/37.2`
-    - `class Workers(KnoeticWorkdayStream)` contains behavior to pull data for workers using `Human_Resources/37.2`
-    - `class WorkerDetails(KnoeticWorkdayStream)` contains behavior to pull data for worker details
-    using `Human_Resources/37.2`
-    - `class WorkerDetailsHistory(IncrementalKnoeticWorkdayStream)` contains behavior to pull data
-    for worker details history using `Human_Resources/37.2`
-    - `class WorkerDetailsPhoto(KnoeticWorkdayStream)` contains behavior to pull data for worker
-    details photo using `Human_Resources/37.2`
-    - `class OrganizationHierarchies(KnoeticWorkdayStream)` contains behavior to pull data for organization
-    hierarchies using `Human_Resources/37.2`
-    - `class Ethnicities(KnoeticWorkdayStream)` contains behavior to pull data for ethnicities using
-    `Human_Resources/37.2`
-    - `class GenderIdentities(KnoeticWorkdayStream)` contains behavior to pull data for gender
-    identities using `Human_Resources/37.2`
-    - `class Locations(KnoeticWorkdayStream)` contains behavior to pull data for locations using `Human_Resources/37.2`
-    - `class JobProfiles(KnoeticWorkdayStream)` contains behavior to pull data for job profiles
-    using `Human_Resources/37.2`
-    - `class SexualOrientations(KnoeticWorkdayStream)` contains behavior to pull data for sexual
-    orientations using `Human_Resources/37.2`
+    - `KnoeticWorkdayStream(HttpStream, ABC)`
+    - `Workers(KnoeticWorkdayStream)`
+    - `WorkerDetails(KnoeticWorkdayStream)`
+    - `WorkerDetailsHistory(IncrementalKnoeticWorkdayStream)`
+    - `WorkerDetailsPhoto(KnoeticWorkdayStream)`
+    - `OrganizationHierarchies(KnoeticWorkdayStream)`
+    - `Ethnicities(KnoeticWorkdayStream)`
+    - `GenderIdentities(KnoeticWorkdayStream)`
+    - `Locations(KnoeticWorkdayStream)`
+    - `JobProfiles(KnoeticWorkdayStream)`
+    - `SexualOrientations(KnoeticWorkdayStream)`
 
     if the API contains the endpoints
         - POST Staffing/37.2
 
     then you should have these classes:
-    - `class Positions(KnoeticWorkdayStream)` contains behavior to pull data for positions using `Staffing/37.2`
+    - `Positions(KnoeticWorkdayStream)`
 
     if the API contains the endpoints
         - POST Integrations/37.2
@@ -80,9 +68,7 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         workday_request: WorkdayRequest,
         file_name: str,
         stream_name: str,
-        api_budget: APIBudget = None,
     ):
-        super().__init__(api_budget)
         self.api_version = config.get("api_version", "37.2")
         self.web_service = config.get("web_service", "Human_Resources")
         self.tenant = config.get("tenant")
@@ -94,6 +80,7 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         self.page = 1
         self.file_name = file_name
         self.stream_name = stream_name
+        super().__init__()
 
     @property
     def http_method(self) -> str:
@@ -145,9 +132,9 @@ class KnoeticWorkdayStream(HttpStream, ABC):
 
     def request_body_data(  # type: ignore
         self,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] = None,
-        next_page_token: Mapping[str, Any] = None,
+        stream_state: Optional[Mapping[str, Any]] = None,
+        stream_slice: Optional[Mapping[str, Any]] = None,
+        next_page_token: Optional[Mapping[str, Any]] = None,
         **kwargs,
     ) -> str:
         """
@@ -171,9 +158,9 @@ class KnoeticWorkdayStream(HttpStream, ABC):
     def path(
         self,
         *,
-        stream_state: Mapping[str, Any] = None,
-        stream_slice: Mapping[str, Any] = None,
-        next_page_token: Mapping[str, Any] = None,
+        stream_state: Optional[Mapping[str, Any]] = None,
+        stream_slice: Optional[Mapping[str, Any]] = None,
+        next_page_token: Optional[Mapping[str, Any]] = None,
     ) -> str:
         return f"{self.tenant}/{self.web_service}/{self.api_version}"
 
@@ -181,11 +168,10 @@ class KnoeticWorkdayStream(HttpStream, ABC):
         self,
         response: requests.Response,
         *,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] = None,
-        next_page_token: Mapping[str, Any] = None,
+        stream_state: Optional[Mapping[str, Any]] = None,
+        stream_slice: Optional[Mapping[str, Any]] = None,
+        next_page_token: Optional[Mapping[str, Any]] = None,
     ) -> Iterable[Mapping[str, Any]]:
-
         parsed_response = self.workday_request.parse_response(response, stream_name=self.stream_name)
 
         yield from parsed_response
@@ -193,23 +179,20 @@ class KnoeticWorkdayStream(HttpStream, ABC):
 
 class Workers(KnoeticWorkdayStream):
     """
-    Represents a stream of `worker` data from the Knoetic Workday source.
-    It inherits from the KnoeticWorkdayStream class.
+    Represents a stream of `workers` data from the Knoetic Workday source.
     """
 
     primary_key = None
 
-    def __init__(self, config: Mapping[str, Any], workday_request: WorkdayRequest, api_budget: APIBudget = None):
-        super().__init__(
-            config=config,
-            workday_request=workday_request,
-            api_budget=api_budget,
-            file_name="workers.xml",
-            stream_name="workers",
-        )
+    def __init__(self, config: Mapping[str, Any], workday_request: WorkdayRequest):
+        super().__init__(config=config, workday_request=workday_request, file_name="workers.xml", stream_name="workers")
 
 
 class WorkerDetails(KnoeticWorkdayStream):
+    """
+    Represents a stream of `worker_details` data from the Knoetic Workday source.
+    """
+
     primary_key = None
 
     def __init__(
@@ -217,22 +200,17 @@ class WorkerDetails(KnoeticWorkdayStream):
         config: Mapping[str, Any],
         workday_request: WorkdayRequest,
         worker_ids: List[str],
-        api_budget: APIBudget = None,
     ):
         super().__init__(
-            config=config,
-            workday_request=workday_request,
-            api_budget=api_budget,
-            file_name="worker_details.xml",
-            stream_name="worker_details",
+            config=config, workday_request=workday_request, file_name="worker_details.xml", stream_name="worker_details"
         )
         self.worker_ids = worker_ids
 
-    def request_body_data(
+    def request_body_data(  # type: ignore
         self,
         stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] = None,
-        next_page_token: Mapping[str, Any] = None,
+        stream_slice: Optional[Mapping[str, Any]] = None,
+        next_page_token: Optional[Mapping[str, Any]] = None,
         **kwargs,
     ) -> str:
         if stream_slice:
@@ -249,7 +227,8 @@ class WorkerDetails(KnoeticWorkdayStream):
 class WorkerDetailsHistory(KnoeticWorkdayStream, IncrementalMixin):
     primary_key = "id"
     state_checkpoint_interval = 100
-    cursor_field = "state"
+    cursor_field = "as_of_effective_date"
+    state_key = "state"
 
     def __init__(
         self,
@@ -268,23 +247,20 @@ class WorkerDetailsHistory(KnoeticWorkdayStream, IncrementalMixin):
 
     @property
     def state(self) -> Mapping[str, Any]:
-        return {self.cursor_field: str(self._cursor_value)}
+        return {self.state_key: str(self._cursor_value)}
 
     @state.setter
     def state(self, value: Mapping[str, Any]):
-        print("value", value)
-        print("self._cursor_value", self._cursor_value)
-        time.sleep(5)
         if not self._cursor_value:
-            self._cursor_value = value
+            self._cursor_value = value  # type: ignore
         else:
-            self._cursor_value = self._cursor_value.update(value)
+            self._cursor_value = self._cursor_value.update(value)  # type: ignore
 
     def request_body_data(  # type: ignore
         self,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] = None,
-        next_page_token: Mapping[str, Any] = None,
+        stream_state: Optional[Mapping[str, Any]] = None,
+        stream_slice: Optional[Mapping[str, Any]] = None,
+        next_page_token: Optional[Mapping[str, Any]] = None,
         **kwargs,
     ) -> str:
         if stream_slice:
@@ -304,9 +280,9 @@ class WorkerDetailsHistory(KnoeticWorkdayStream, IncrementalMixin):
         self,
         response: requests.Response,
         *,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] = None,
-        next_page_token: Mapping[str, Any] = None,
+        stream_state: Optional[Mapping[str, Any]] = None,
+        stream_slice: Optional[Mapping[str, Any]] = None,
+        next_page_token: Optional[Mapping[str, Any]] = None,
     ) -> Iterable[Mapping[str, Any]]:
         parsed_response = self.workday_request.parse_response(response, stream_name="worker_details_history")
         for record in parsed_response:
@@ -316,10 +292,10 @@ class WorkerDetailsHistory(KnoeticWorkdayStream, IncrementalMixin):
     def read_records(
         self,
         sync_mode: SyncMode,
-        cursor_field: List[str] | None = None,
-        stream_slice: Mapping[str, Any] | None = None,
-        stream_state: Mapping[str, Any] | None = None,
-    ) -> Iterable[Mapping[str, Any] | AirbyteMessage]:
+        cursor_field: Optional[List[str]] = None,
+        stream_slice: Optional[Mapping[str, Any]] = None,
+        stream_state: Optional[Mapping[str, Any]] = None,
+    ) -> Iterable[Union[Mapping[str, Any], AirbyteMessage]]:
         for record in super().read_records(sync_mode, cursor_field, stream_slice, stream_state):
             if self._cursor_value:
                 self._cursor_value.update({record["Worker_Data"]["Worker_ID"]: record["as_of_effective_date"]})
@@ -331,21 +307,21 @@ class WorkerDetailsHistory(KnoeticWorkdayStream, IncrementalMixin):
         self,
         *,
         sync_mode: SyncMode,
-        cursor_field: List[str] = None,
-        stream_state: Mapping[str, Any] = None,
+        cursor_field: Optional[List[str]] = None,
+        stream_state: Optional[Mapping[str, Any]] = None,
     ) -> Iterable[Mapping[str, Any]]:
-
-        min_original_hire_date = min(
-            datetime.strptime(worker.get("Original_Hire_Date"), "%Y-%m-%d") for worker in self.workers_data
-        )
-        state_date = stream_state.get(self.cursor_field) if stream_state else min_original_hire_date
-
         slices = []
         for worker in self.workers_data:
-            worker_id = worker.get("Worker_ID")
-            original_hire_date = datetime.strptime(worker.get("Original_Hire_Date"), "%Y-%m-%d")
+            worker_id = worker["Worker_ID"]
+            original_hire_date = datetime.strptime(worker["Original_Hire_Date"], "%Y-%m-%d")
 
-            start_date = max(state_date, original_hire_date)
+            # Get checkpoint date from state for this worker
+            state_date = stream_state.get(worker_id) if stream_state else None
+
+            if state_date:
+                start_date = datetime.strptime(state_date, "%Y-%m-%d")
+            else:
+                start_date = original_hire_date
 
             termination_date = worker.get("Termination_Date")
             if termination_date:
@@ -353,7 +329,6 @@ class WorkerDetailsHistory(KnoeticWorkdayStream, IncrementalMixin):
             else:
                 end_date = datetime.now()
 
-            start_date = end_date - timedelta(days=3)
             while start_date <= end_date:
                 slices.append({"Worker_ID": worker_id, "as_of_effective_date": start_date.strftime("%Y-%m-%d")})
                 start_date += timedelta(days=1)
@@ -381,11 +356,11 @@ class WorkerDetailsPhoto(KnoeticWorkdayStream):
         self.worker_ids = worker_ids
         self.current_worker_id = None
 
-    def request_body_data(
+    def request_body_data(  # type: ignore
         self,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] = None,
-        next_page_token: Mapping[str, Any] = None,
+        stream_state: Optional[Mapping[str, Any]] = None,
+        stream_slice: Optional[Mapping[str, Any]] = None,
+        next_page_token: Optional[Mapping[str, Any]] = None,
         **kwargs,
     ) -> str:
         if stream_slice:
@@ -399,9 +374,9 @@ class WorkerDetailsPhoto(KnoeticWorkdayStream):
         self,
         response: requests.Response,
         *,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] = None,
-        next_page_token: Mapping[str, Any] = None,
+        stream_state: Optional[Mapping[str, Any]] = None,
+        stream_slice: Optional[Mapping[str, Any]] = None,
+        next_page_token: Optional[Mapping[str, Any]] = None,
     ) -> Iterable[Mapping[str, Any]]:
         parsed_response = self.workday_request.parse_response(response, stream_name="worker_details_photo")
         for record in parsed_response:
@@ -414,7 +389,6 @@ class WorkerDetailsPhoto(KnoeticWorkdayStream):
 class OrganizationHierarchies(KnoeticWorkdayStream):
     """
     Represents a collection of streams of `organization hierarchies` data from the Knoetic Workday source.
-    It inherits from the KnoeticWorkdayStream class.
     """
 
     primary_key = None
@@ -431,24 +405,19 @@ class OrganizationHierarchies(KnoeticWorkdayStream):
 class Ethnicities(KnoeticWorkdayStream):
     """
     Represents a collection of streams of `ethnicities` data from the Knoetic Workday source.
-    It inherits from the KnoeticWorkdayStream class.
     """
 
     primary_key = None
 
     def __init__(self, config: Mapping[str, Any], workday_request: WorkdayRequest):
         super().__init__(
-            config=config,
-            workday_request=workday_request,
-            file_name="ethnicities.xml",
-            stream_name="ethinicities",
+            config=config, workday_request=workday_request, file_name="ethnicities.xml", stream_name="ethinicities"
         )
 
 
 class GenderIdentities(KnoeticWorkdayStream):
     """
     Represents a collection of streams of `gender_identities` data from the Knoetic Workday source.
-    It inherits from the KnoeticWorkdayStream class.
     """
 
     primary_key = None
@@ -465,17 +434,13 @@ class GenderIdentities(KnoeticWorkdayStream):
 class Locations(KnoeticWorkdayStream):
     """
     Represents a collection of streams of `locations` data from the Knoetic Workday source.
-    It inherits from the KnoeticWorkdayStream class.
     """
 
     primary_key = None
 
     def __init__(self, config: Mapping[str, Any], workday_request: WorkdayRequest):
         super().__init__(
-            config=config,
-            workday_request=workday_request,
-            file_name="locations.xml",
-            stream_name="locations",
+            config=config, workday_request=workday_request, file_name="locations.xml", stream_name="locations"
         )
 
 
@@ -489,17 +454,13 @@ class JobProfiles(KnoeticWorkdayStream):
 
     def __init__(self, config: Mapping[str, Any], workday_request: WorkdayRequest):
         super().__init__(
-            config=config,
-            workday_request=workday_request,
-            file_name="job_profiles.xml",
-            stream_name="job_profiles",
+            config=config, workday_request=workday_request, file_name="job_profiles.xml", stream_name="job_profiles"
         )
 
 
 class Positions(KnoeticWorkdayStream):
     """
     Represents a collection of streams of `positions` data from the Knoetic Workday source.
-    It inherits from the KnoeticWorkdayStream class.
     """
 
     primary_key = None
@@ -516,7 +477,6 @@ class Positions(KnoeticWorkdayStream):
 class SexualOrientations(KnoeticWorkdayStream):
     """
     Represents a collection of streams of `positions` data from the Knoetic Workday source.
-    It inherits from the KnoeticWorkdayStream class.
     """
 
     primary_key = None
@@ -533,7 +493,6 @@ class SexualOrientations(KnoeticWorkdayStream):
 class References(KnoeticWorkdayStream):
     """
     Represents a collection of streams of `references` data from the Knoetic Workday source.
-    It inherits from the KnoeticWorkdayStream class.
     """
 
     primary_key = None
@@ -544,10 +503,7 @@ class References(KnoeticWorkdayStream):
         workday_request: WorkdayRequest,
     ):
         super().__init__(
-            config=config,
-            workday_request=workday_request,
-            file_name="references.xml",
-            stream_name="references",
+            config=config, workday_request=workday_request, file_name="references.xml", stream_name="references"
         )
         self.web_service = "Integrations"
         self.reference_types = [
@@ -631,9 +587,9 @@ class BaseCustomReport(KnoeticWorkdayStream):
     def path(
         self,
         *,
-        stream_state: Mapping[str, Any] = None,
-        stream_slice: Mapping[str, Any] = None,
-        next_page_token: Mapping[str, Any] = None,
+        stream_state: Optional[Mapping[str, Any]] = None,
+        stream_slice: Optional[Mapping[str, Any]] = None,
+        next_page_token: Optional[Mapping[str, Any]] = None,
     ) -> str:
         report_name = stream_slice.get("report_name")
         format_type = stream_slice.get("format_type")
@@ -641,12 +597,13 @@ class BaseCustomReport(KnoeticWorkdayStream):
         url_query_char = "&" if "?" in report_name else "?"
         return f"customreport2/{self.tenant}/{self.username}/{report_name}{url_query_char}format={format_type}"
 
+    # TODO: check the complaints from mypy.
     def request_headers(
         self,
         *,
-        stream_state: Mapping[str, Any] = None,
-        stream_slice: Mapping[str, Any] = None,
-        next_page_token: Mapping[str, Any] = None,
+        stream_state: Optional[Mapping[str, Any]] = None,
+        stream_slice: Optional[Mapping[str, Any]] = None,
+        next_page_token: Optional[Mapping[str, Any]] = None,
     ) -> Mapping[str, Any]:
         format_type = "application/xml" if stream_slice.get("format_type") == "xml" else "text/csv"
         token = base64.b64encode(f"{self.username}:{self.password}".encode("utf-8")).decode("utf-8")
@@ -666,11 +623,11 @@ class BaseCustomReport(KnoeticWorkdayStream):
         self,
         response: requests.Response,
         *,
-        stream_state: Mapping[str, Any],
-        stream_slice: Mapping[str, Any] = None,
-        next_page_token: Mapping[str, Any] = None,
+        stream_state: Optional[Mapping[str, Any]] = None,
+        stream_slice: Optional[Mapping[str, Any]] = None,
+        next_page_token: Optional[Mapping[str, Any]] = None,
     ) -> Iterable[Mapping[str, Any]]:
-        if stream_slice.get("format_type") == "xml":
+        if stream_slice and stream_slice.get("format_type") == "xml":
             if stream_slice.get("report_name") == self.base_historical_report_compensation:
                 response_json = self.workday_request.parse_response(
                     response, stream_name="base_historical_report_compensation"
@@ -731,42 +688,23 @@ class SourceKnoeticWorkday(AbstractSource):
         workday_request = WorkdayRequest()
 
         # workers_stream = Workers(config=config, workday_request=workday_request)
-
         # workers_data = self.get_worker_info_for_substreams(workers_stream)
-        workers_data = [
+        workers_data: List[Mapping[str, Any]] = [
             {
                 "Worker_ID": "65fd8bbd9d35100651cdc72f47ca0000",
-                "Original_Hire_Date": "2012-05-31",
-                "Hire_Date": "2012-05-31",
+                "Original_Hire_Date": "2024-05-31",
+                "Hire_Date": "2024-05-31",
                 "Termination_Date": None,
             },
             {
                 "Worker_ID": "65fd8bbd9d35100651cde2c918f30001",
-                "Original_Hire_Date": "2013-08-14",
-                "Hire_Date": "2013-08-14",
-                "Termination_Date": None,
-            },
-            {
-                "Worker_ID": "65fd8bbd9d35100651cdef63f5820000",
-                "Original_Hire_Date": "2013-09-01",
-                "Hire_Date": "2013-09-01",
-                "Termination_Date": None,
-            },
-            {
-                "Worker_ID": "65fd8bbd9d35100651cdfb6303620001",
-                "Original_Hire_Date": "2013-09-01",
-                "Hire_Date": "2013-09-01",
-                "Termination_Date": None,
-            },
-            {
-                "Worker_ID": "65fd8bbd9d35100651ce076303c00000",
-                "Original_Hire_Date": "2014-06-09",
-                "Hire_Date": "2014-06-09",
+                "Original_Hire_Date": "2024-04-14",
+                "Hire_Date": "2024-04-14",
                 "Termination_Date": None,
             },
         ]
 
-        worker_ids = [worker["Worker_ID"] for worker in workers_data]
+        worker_ids: List[str] = [worker["Worker_ID"] for worker in workers_data]
 
         return [
             Workers(config=config, workday_request=workday_request),
