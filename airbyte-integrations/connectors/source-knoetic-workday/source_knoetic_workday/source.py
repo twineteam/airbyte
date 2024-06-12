@@ -687,22 +687,24 @@ class SourceKnoeticWorkday(AbstractSource):
 
         workday_request = WorkdayRequest()
 
-        # workers_stream = Workers(config=config, workday_request=workday_request)
-        # workers_data = self.get_worker_info_for_substreams(workers_stream)
-        workers_data: List[Mapping[str, Any]] = [
-            {
-                "Worker_ID": "65fd8bbd9d35100651cdc72f47ca0000",
-                "Original_Hire_Date": "2024-05-31",
-                "Hire_Date": "2024-05-31",
-                "Termination_Date": None,
-            },
-            {
-                "Worker_ID": "65fd8bbd9d35100651cde2c918f30001",
-                "Original_Hire_Date": "2024-04-14",
-                "Hire_Date": "2024-04-14",
-                "Termination_Date": None,
-            },
-        ]
+        workers_stream = Workers(config=config, workday_request=workday_request)
+        workers_data = self.get_worker_info_for_substreams(workers_stream)
+
+        # TODO: Remove this mock data (used for debugging purposes only)
+        # workers_data: List[Mapping[str, Any]] = [
+        #     {
+        #         "Worker_ID": "65fd8bbd9d35100651cdc72f47ca0000",
+        #         "Original_Hire_Date": "2024-05-31",
+        #         "Hire_Date": "2024-05-31",
+        #         "Termination_Date": None,
+        #     },
+        #     {
+        #         "Worker_ID": "65fd8bbd9d35100651cde2c918f30001",
+        #         "Original_Hire_Date": "2024-04-14",
+        #         "Hire_Date": "2024-04-14",
+        #         "Termination_Date": None,
+        #     },
+        # ]
 
         worker_ids: List[str] = [worker["Worker_ID"] for worker in workers_data]
 
