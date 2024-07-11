@@ -297,11 +297,22 @@ class WorkerDetailsHistory(KnoeticWorkdayStream, IncrementalMixin):
         stream_state: Optional[Mapping[str, Any]] = None,
     ) -> Iterable[Union[Mapping[str, Any], AirbyteMessage]]:
         for record in super().read_records(sync_mode, cursor_field, stream_slice, stream_state):
+            # Derive Worker_ID from record
+            worker_reference_ids = record.get("Worker_Reference", {}).get("ID", [])
+            worker_id = next((ref.get("#content") for ref in worker_reference_ids if ref.get("-type") == "WID"), None)
+
+            worker_state = {worker_id: record["as_of_effective_date"]}
+
             if self._cursor_value:
-                self._cursor_value.update({record["Worker_Data"]["Worker_ID"]: record["as_of_effective_date"]})
+                self._cursor_value.update(worker_state)
             else:
-                self._cursor_value = {record["Worker_Data"]["Worker_ID"]: record["as_of_effective_date"]}
+                self._cursor_value = worker_state
+
             yield record
+
+    @property
+    def supports_incremental(self) -> bool:
+        return True
 
     def stream_slices(
         self,
@@ -327,7 +338,7 @@ class WorkerDetailsHistory(KnoeticWorkdayStream, IncrementalMixin):
             if termination_date:
                 end_date = datetime.strptime(termination_date, "%Y-%m-%d")
             else:
-                end_date = datetime.now()
+                end_date = datetime.today()
 
             while start_date <= end_date:
                 slices.append({"Worker_ID": worker_id, "as_of_effective_date": start_date.strftime("%Y-%m-%d")})
@@ -689,23 +700,6 @@ class SourceKnoeticWorkday(AbstractSource):
 
         workers_stream = Workers(config=config, workday_request=workday_request)
         workers_data = self.get_worker_info_for_substreams(workers_stream)
-
-        # TODO: Remove this mock data (used for debugging purposes only)
-        # workers_data: List[Mapping[str, Any]] = [
-        #     {
-        #         "Worker_ID": "65fd8bbd9d35100651cdc72f47ca0000",
-        #         "Original_Hire_Date": "2024-05-31",
-        #         "Hire_Date": "2024-05-31",
-        #         "Termination_Date": None,
-        #     },
-        #     {
-        #         "Worker_ID": "65fd8bbd9d35100651cde2c918f30001",
-        #         "Original_Hire_Date": "2024-04-14",
-        #         "Hire_Date": "2024-04-14",
-        #         "Termination_Date": None,
-        #     },
-        # ]
-
         worker_ids: List[str] = [worker["Worker_ID"] for worker in workers_data]
 
         return [

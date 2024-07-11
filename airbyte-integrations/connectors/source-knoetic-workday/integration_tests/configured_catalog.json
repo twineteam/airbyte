@@ -22,11 +22,10 @@
       "stream": {
         "name": "worker_details_history",
         "json_schema": {},
-        "supported_sync_modes": ["full_refresh", "incremental"],
-        "supported_destination_sync_modes": ["overwrite", "append_dedup"]
+        "supported_sync_modes": ["full_refresh", "incremental"]
       },
       "sync_mode": "incremental",
-      "destination_sync_mode": "append_dedup"
+      "destination_sync_mode": "overwrite"
     },
     {
       "stream": {
