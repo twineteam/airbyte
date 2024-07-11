@@ -1,0 +1,24 @@
+<wd:Get_Job_Profiles_Request xmlns:wd="urn:com.workday/bsvc" wd:version="v37.2">
+    <wd:Response_Filter>
+        <wd:Page>PAGE_NUMBER</wd:Page>
+        <wd:Count>PER_PAGE</wd:Count>
+    </wd:Response_Filter>
+    <wd:Response_Group>
+        <wd:Include_Reference>1</wd:Include_Reference>
+        <wd:Include_Job_Profile_Basic_Data>1</wd:Include_Job_Profile_Basic_Data>
+        <wd:Include_Job_Classifications_Data>1</wd:Include_Job_Classifications_Data>
+        <wd:Include_Job_Profile_Pay_Rate_Data>1</wd:Include_Job_Profile_Pay_Rate_Data>
+        <wd:Include_Job_Profile_Exempt_Data>1</wd:Include_Job_Profile_Exempt_Data>
+        <wd:Include_Workers_Compensation_Data>1</wd:Include_Workers_Compensation_Data>
+        <wd:Include_Responsibility_Qualifications>1</wd:Include_Responsibility_Qualifications>
+        <wd:Include_Work_Experience_Qualifications>1</wd:Include_Work_Experience_Qualifications>
+        <wd:Include_Education_Qualifications>1</wd:Include_Education_Qualifications>
+        <wd:Include_Language_Qualifications>1</wd:Include_Language_Qualifications>
+        <wd:Include_Competency_Qualifications>1</wd:Include_Competency_Qualifications>
+        <wd:Include_Certification_Qualifications>1</wd:Include_Certification_Qualifications>
+        <wd:Include_Certification_Reference_Only>1</wd:Include_Certification_Reference_Only>
+        <wd:Include_Training_Qualifications>1</wd:Include_Training_Qualifications>
+        <wd:Include_Job_Profile_Compensation_Data>1</wd:Include_Job_Profile_Compensation_Data>
+        <wd:Include_Skill_Qualifications>1</wd:Include_Skill_Qualifications>
+    </wd:Response_Group>
+</wd:Get_Job_Profiles_Request>

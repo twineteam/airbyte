@@ -1,0 +1,57 @@
+documentationUrl: https://docsurl.com
+connectionSpecification:
+  $schema: http://json-schema.org/draft-07/schema#
+  title: Knoetic Workday Spec
+  type: object
+  required:
+    - tenant
+    - url
+    - username
+    - password
+
+  properties:
+    tenant:
+      type: string
+      description: The tenant name in the Knoetic definition
+
+    url:
+      type: string
+      description: The URL for the Workday instance
+
+    username:
+      type: string
+      description: The username for the Workday instance
+
+    password:
+      type: string
+      description: The password for the Knoetic instance
+      airbyte_secret: true
+
+    base_snapshot_report:
+      type: string
+      description: The name of the base snapshot report
+
+    base_historical_report_compensation:
+      type: string
+      description: The name of the base historical report compensation
+
+    base_historical_report_job:
+      type: string
+      description: The name of the base historical report job
+
+    api_version:
+      type: string
+      description: The version of the Workday API to use
+      default: "37.2"
+
+    web_service:
+      type: string
+      description: The web service to use
+      default: "Human_Resources"
+
+    per_page:
+      type: integer
+      description: The number of records to fetch per page
+      default: 200
+      minimum: 1
+      maximum: 999

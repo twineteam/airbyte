@@ -1,0 +1,6 @@
+<wd:Get_Ethnicities_Request xmlns:wd="urn:com.workday/bsvc" wd:version="v37.2">
+    <wd:Response_Filter>
+        <wd:Page>PAGE_NUMBER</wd:Page>
+        <wd:Count>PER_PAGE</wd:Count>
+    </wd:Response_Filter>
+</wd:Get_Ethnicities_Request>
